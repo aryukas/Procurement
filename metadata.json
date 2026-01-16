@@ -1,0 +1,5 @@
+{
+  "name": "Web Express Reverse Bidding",
+  "description": "A high-performance logistics auction platform for real-time shipment bidding, vendor lane management, and cost optimization.",
+  "requestFramePermissions": []
+}
