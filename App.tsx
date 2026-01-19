@@ -28,8 +28,9 @@ import {
   Notification, 
   VehicleType, 
   LoadType, 
-  VehicleDetails 
-} from './types';
+  VehicleDetails,
+  Lane 
+} from './src/types';
 import AdminDashboard from './components/AdminDashboard';
 import VendorDashboard from './components/VendorDashboard';
 import Login from './components/Login';
@@ -40,6 +41,7 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const { bids, loading: bidsLoading } = useBids();
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [lanes, setLanes] = useState<Lane[]>([]);
 
   // Simulation of "real-time" clock or bid updates could happen here
   
@@ -64,6 +66,19 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setCurrentUser(null);
   };
+
+  // Load lanes on component mount
+  useEffect(() => {
+    const loadLanes = async () => {
+      try {
+        const allLanes = await FirebaseService.getAllLanes(true);
+        setLanes(allLanes);
+      } catch (error) {
+        console.error('Failed to load lanes:', error);
+      }
+    };
+    loadLanes();
+  }, []);
 
   const createBid = async (newBidData: Partial<ShipmentBid>) => {
     try {
@@ -244,7 +259,8 @@ const App: React.FC = () => {
         ) : (
           <VendorDashboard 
             currentUser={currentUser}
-            bids={bids} 
+            bids={bids}
+            lanes={lanes}
             onPlaceOffer={placeOffer}
             onRespondToCounter={respondToCounter}
             onSubmitVehicle={submitVehicleDetails}

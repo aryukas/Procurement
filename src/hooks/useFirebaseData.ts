@@ -1,7 +1,7 @@
 // src/hooks/useFirebaseData.ts
 import { useState, useEffect } from 'react';
 import { FirebaseService } from '../services/firebaseService';
-import { ShipmentBid, Shipment } from '../../types';
+import { ShipmentBid, Shipment } from '../types';
 
 export const useBids = () => {
   const [bids, setBids] = useState<ShipmentBid[]>([]);

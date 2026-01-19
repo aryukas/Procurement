@@ -16,54 +16,13 @@ import {
   X
 } from 'lucide-react';
 
-import { ShipmentBid, BidStatus, BidOffer, VehicleDetails, Notification, User } from '../types';
-
-interface VehicleDetails {
-  vehicleNumber: string;
-  vehicleType: string;
-  driverName: string;
-  driverPhone: string;
-  expectedDispatch: string;
-}
-
-interface ShipmentBid {
-  id: string;
-  origin: string;
-  destination: string;
-  lane: string;
-  vehicleType: string;
-  loadType: string;
-  materialType: string;
-  capacity: string;
-  pickupTime: number;
-  status: BidStatus;
-  offers: BidOffer[];
-  winningVendorId?: string;
-  counterOffer?: number;
-  finalAmount?: number;
-  vehicleDetailsSubmitted?: boolean;
-}
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: 'admin' | 'vendor';
-  lanes?: string[];
-}
-
-interface Notification {
-  id: string;
-  type: 'success' | 'alert' | 'info';
-  title: string;
-  message: string;
-  timestamp: number;
-  read?: boolean;
-}
+import { ShipmentBid, BidStatus, BidOffer, VehicleDetails, Notification, User, Vendor, Lane } from '../src/types';
+import { shipmentMatchesLane } from '../src/hooks/useLaneMatching';
 
 interface VendorDashboardProps {
-  currentUser: User;
+  currentUser: Vendor;
   bids: ShipmentBid[];
+  lanes: Lane[];
   onPlaceOffer: (bidId: string, vendorId: string, vendorName: string, amount: number) => void;
   onRespondToCounter: (bidId: string, accept: boolean) => void;
   onSubmitVehicle: (bidId: string, details: VehicleDetails) => void;
@@ -72,7 +31,8 @@ interface VendorDashboardProps {
 
 const VendorDashboard: React.FC<VendorDashboardProps> = ({ 
   currentUser, 
-  bids, 
+  bids,
+  lanes,
   onPlaceOffer, 
   onRespondToCounter,
   onSubmitVehicle,
@@ -89,8 +49,22 @@ const VendorDashboard: React.FC<VendorDashboardProps> = ({
   });
 
   const matchingBids = useMemo(() => {
-    return bids.filter(bid => currentUser.lanes?.includes(bid.lane));
-  }, [bids, currentUser.lanes]);
+    // Filter shipments that match the vendor's assigned lanes
+    return bids.filter(bid => {
+      // Check if vendor has any assigned lanes
+      if (!currentUser.lanes || currentUser.lanes.length === 0) {
+        return false;
+      }
+      
+      // Get the lanes assigned to this vendor
+      const vendorLaneIds = currentUser.lanes;
+      
+      // Check if shipment matches any of the vendor's lanes
+      return lanes.some(lane => 
+        vendorLaneIds.includes(lane.id) && shipmentMatchesLane(bid, lane)
+      );
+    });
+  }, [bids, currentUser.lanes, lanes]);
 
   const handleBidding = (bidId: string) => {
     const amount = parseInt(bidAmount[bidId]);

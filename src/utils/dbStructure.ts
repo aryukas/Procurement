@@ -8,6 +8,7 @@ export const DB_PATHS = {
   PLACE_OFFERS: 'placeOffers',
   VEHICLE_DETAILS: 'vehicleDetails',
   RESPOND_TO_COUNTER: 'respondToCounter',
+  LANES: 'lanes',
 };
 
 export interface User {
