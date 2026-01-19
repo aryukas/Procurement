@@ -31,6 +31,15 @@ export interface User {
   lanes?: string[]; // Only for vendors
 }
 
+export interface Vendor extends User {
+  email: string;
+  phone: string;
+  vehicleTypes: VehicleType[];
+  isDeleted?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Lane {
   id: string;
   name: string; // e.g., "DELHI-MUMBAI"

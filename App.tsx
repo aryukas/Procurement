@@ -29,7 +29,7 @@ import {
   VehicleType, 
   LoadType, 
   VehicleDetails 
-} from './types';
+} from './src/types';
 import AdminDashboard from './components/AdminDashboard';
 import VendorDashboard from './components/VendorDashboard';
 import Login from './components/Login';

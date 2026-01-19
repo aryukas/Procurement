@@ -25,9 +25,14 @@ import {
   Globe,
   Settings,
   Building2,
-  Route
+  Route,
+  Edit2,
+  Trash2,
+  Phone,
+  Mail
 } from 'lucide-react';
-import { ShipmentBid, BidStatus, VehicleType, LoadType, Notification, User, UserRole, Lane } from '../types';
+import { ShipmentBid, BidStatus, VehicleType, LoadType, Notification, User, UserRole, Lane, Vendor } from '../src/types';
+import { FirebaseService } from '../src/services/firebaseService';
 import { INITIAL_LANES, MOCK_USERS } from '../mockData';
 
 interface AdminDashboardProps {
@@ -60,17 +65,41 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [now, setNow] = useState(new Date());
   const [bidValidationError, setBidValidationError] = useState<string>('');
 
-  // Master Data States (Demo purposes)
-  const [vendors, setVendors] = useState<User[]>(MOCK_USERS.filter(u => u.role === UserRole.VENDOR));
+  // Master Data States
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [lanes, setLanes] = useState<Lane[]>(INITIAL_LANES);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>('');
+
+  // Vendor Form States
+  const [editingVendorId, setEditingVendorId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [newVendor, setNewVendor] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    vehicleTypes: [] as VehicleType[],
+    lanes: [] as string[]
+  });
+  const [vendorErrors, setVendorErrors] = useState<Record<string, string>>({});
 
   // Form States for Masters
-  const [newVendor, setNewVendor] = useState({ name: '', lanes: [] as string[] });
   const [newLane, setNewLane] = useState({ origin: '', destination: '' });
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  // Load vendors from Firebase
+  useEffect(() => {
+    const loadVendors = async () => {
+      setLoading(true);
+      const vendorsList = await FirebaseService.getVendors();
+      setVendors(vendorsList);
+      setLoading(false);
+    };
+    loadVendors();
   }, []);
 
   const [expandedSections, setExpandedSections] = useState({
@@ -179,17 +208,143 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsModalOpen(false);
   };
 
-  const handleAddVendor = (e: React.FormEvent) => {
+  // Vendor Management Functions
+  const validateVendorForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (!newVendor.name.trim()) {
+      errors.name = 'Vendor name is required';
+    }
+    if (!newVendor.email.trim()) {
+      errors.email = 'Email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newVendor.email)) {
+      errors.email = 'Invalid email format';
+    }
+    if (!newVendor.phone.trim()) {
+      errors.phone = 'Phone is required';
+    } else if (!/^\d{10,}$/.test(newVendor.phone.replace(/\D/g, ''))) {
+      errors.phone = 'Phone must have at least 10 digits';
+    }
+    if (newVendor.vehicleTypes.length === 0) {
+      errors.vehicleTypes = 'Select at least one vehicle type';
+    }
+    if (newVendor.lanes.length === 0) {
+      errors.lanes = 'Assign at least one lane';
+    }
+
+    setVendorErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleAddVendor = async (e: React.FormEvent) => {
     e.preventDefault();
-    const vendor: User = {
-      id: `v-${Date.now()}`,
-      name: newVendor.name,
-      role: UserRole.VENDOR,
-      lanes: newVendor.lanes
-    };
-    setVendors([...vendors, vendor]);
-    setNewVendor({ name: '', lanes: [] });
-    setIsVendorModalOpen(false);
+
+    if (!validateVendorForm()) {
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      if (editingVendorId) {
+        // Update existing vendor
+        const result = await FirebaseService.updateVendor(editingVendorId, {
+          name: newVendor.name,
+          email: newVendor.email,
+          phone: newVendor.phone,
+          vehicleTypes: newVendor.vehicleTypes,
+          lanes: newVendor.lanes
+        });
+
+        if (result.success) {
+          const updatedVendors = vendors.map(v =>
+            v.id === editingVendorId
+              ? {
+                  ...v,
+                  name: newVendor.name,
+                  email: newVendor.email,
+                  phone: newVendor.phone,
+                  vehicleTypes: newVendor.vehicleTypes,
+                  lanes: newVendor.lanes
+                }
+              : v
+          );
+          setVendors(updatedVendors);
+        } else {
+          setError('Failed to update vendor');
+        }
+      } else {
+        // Create new vendor
+        const result = await FirebaseService.createVendor({
+          name: newVendor.name,
+          email: newVendor.email,
+          phone: newVendor.phone,
+          vehicleTypes: newVendor.vehicleTypes,
+          lanes: newVendor.lanes,
+          role: UserRole.VENDOR
+        });
+
+        if (result.success) {
+          const createdVendor = await FirebaseService.getVendor(result.vendorId!);
+          if (createdVendor) {
+            setVendors([...vendors, createdVendor]);
+          }
+        } else {
+          setError('Failed to create vendor');
+        }
+      }
+
+      resetVendorForm();
+      setIsVendorModalOpen(false);
+    } catch (err) {
+      setError('An error occurred while saving vendor');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditVendor = (vendor: Vendor) => {
+    setEditingVendorId(vendor.id);
+    setNewVendor({
+      name: vendor.name,
+      email: vendor.email,
+      phone: vendor.phone,
+      vehicleTypes: vendor.vehicleTypes,
+      lanes: vendor.lanes || []
+    });
+    setIsVendorModalOpen(true);
+  };
+
+  const handleDeleteVendor = async (vendorId: string) => {
+    setLoading(true);
+    try {
+      const result = await FirebaseService.deleteVendor(vendorId);
+      if (result.success) {
+        setVendors(vendors.filter(v => v.id !== vendorId));
+        setDeleteConfirmId(null);
+      } else {
+        setError('Failed to delete vendor');
+      }
+    } catch (err) {
+      setError('An error occurred while deleting vendor');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetVendorForm = () => {
+    setEditingVendorId(null);
+    setNewVendor({
+      name: '',
+      email: '',
+      phone: '',
+      vehicleTypes: [],
+      lanes: []
+    });
+    setVendorErrors({});
   };
 
   const handleAddLane = (e: React.FormEvent) => {
@@ -411,52 +566,117 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <p className="text-sm text-slate-500">Manage transport partners and their operating lanes.</p>
             </div>
             <button 
-              onClick={() => setIsVendorModalOpen(true)}
+              onClick={() => {
+                resetVendorForm();
+                setIsVendorModalOpen(true);
+              }}
               className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl flex items-center space-x-2 transition-all font-bold shadow-lg shadow-blue-50"
             >
               <Plus className="w-5 h-5" />
               <span>Add New Vendor</span>
             </button>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest">
-                  <th className="px-8 py-4">Vendor Name</th>
-                  <th className="px-8 py-4">Associated Lanes</th>
-                  <th className="px-8 py-4">Status</th>
-                  <th className="px-8 py-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {vendors.map(vendor => (
-                  <tr key={vendor.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-8 py-6">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600 font-bold">
-                          {vendor.name.charAt(0)}
-                        </div>
-                        <span className="font-bold text-slate-800">{vendor.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-8 py-6">
-                      <div className="flex flex-wrap gap-2">
-                        {vendor.lanes?.map(l => (
-                          <span key={l} className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2.5 py-1 rounded-lg border border-slate-200">{l}</span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-8 py-6">
-                      <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-tight">Active</span>
-                    </td>
-                    <td className="px-8 py-6">
-                      <button className="text-slate-400 hover:text-slate-600 transition-colors"><Settings className="w-5 h-5" /></button>
-                    </td>
+
+          {error && (
+            <div className="bg-red-50 border-b border-red-200 px-8 py-4 flex items-start space-x-3">
+              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm font-medium text-red-700">{error}</p>
+            </div>
+          )}
+
+          {vendors.length === 0 ? (
+            <div className="p-12 text-center">
+              <Users className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+              <p className="text-slate-500 font-medium mb-4">No vendors added yet</p>
+              <button
+                onClick={() => {
+                  resetVendorForm();
+                  setIsVendorModalOpen(true);
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl inline-flex items-center space-x-2 font-bold"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create First Vendor</span>
+              </button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest">
+                    <th className="px-8 py-4">Vendor Name</th>
+                    <th className="px-8 py-4">Email</th>
+                    <th className="px-8 py-4">Phone</th>
+                    <th className="px-8 py-4">Vehicle Types</th>
+                    <th className="px-8 py-4">Lanes</th>
+                    <th className="px-8 py-4">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {vendors.map(vendor => (
+                    <tr key={vendor.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-8 py-6">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600 font-bold text-sm">
+                            {vendor.name.charAt(0).toUpperCase()}
+                          </div>
+                          <span className="font-bold text-slate-800">{vendor.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <div className="flex items-center space-x-1 text-slate-600 text-sm">
+                          <Mail className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{vendor.email}</span>
+                        </div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <div className="flex items-center space-x-1 text-slate-600 text-sm">
+                          <Phone className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{vendor.phone}</span>
+                        </div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <div className="flex flex-wrap gap-1.5">
+                          {vendor.vehicleTypes.map(vt => (
+                            <span key={vt} className="bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-1 rounded border border-blue-200">
+                              {vt}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <div className="flex flex-wrap gap-1.5">
+                          {vendor.lanes?.map(l => (
+                            <span key={l} className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded border border-slate-200">
+                              {l}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => handleEditVendor(vendor)}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Edit vendor"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirmId(vendor.id)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete vendor"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -598,39 +818,201 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* Vendor Master Modal */}
       {isVendorModalOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col p-8">
-            <h3 className="text-xl font-bold text-slate-800 mb-6">Create New Vendor</h3>
-            <form onSubmit={handleAddVendor} className="space-y-6">
-              <div className="space-y-1">
-                <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Vendor Entity Name</label>
-                <input required className={boxInputClasses} value={newVendor.name} onChange={e => setNewVendor({...newVendor, name: e.target.value})} placeholder="e.g. Express Haulers Ltd." />
+          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="bg-white px-8 py-6 border-b flex items-center justify-between sticky top-0">
+              <h3 className="text-xl font-bold text-slate-800">
+                {editingVendorId ? 'Update Vendor' : 'Create New Vendor'}
+              </h3>
+              <button
+                onClick={() => {
+                  setIsVendorModalOpen(false);
+                  resetVendorForm();
+                }}
+                className="p-1 hover:bg-slate-100 rounded-lg"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddVendor} className="flex-grow overflow-y-auto p-8 space-y-6">
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start space-x-3">
+                  <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs font-medium text-red-700">{error}</p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-6">
+                {/* Vendor Name */}
+                <div className="space-y-1">
+                  <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Vendor Name *</label>
+                  <input
+                    className={`${boxInputClasses} ${vendorErrors.name ? 'border-red-500 focus:ring-red-500' : ''}`}
+                    value={newVendor.name}
+                    onChange={e => {
+                      setNewVendor({...newVendor, name: e.target.value});
+                      if (vendorErrors.name) {
+                        setVendorErrors({...vendorErrors, name: ''});
+                      }
+                    }}
+                    placeholder="e.g. Express Haulers Ltd."
+                  />
+                  {vendorErrors.name && <p className="text-xs text-red-600 mt-1">{vendorErrors.name}</p>}
+                </div>
+
+                {/* Email */}
+                <div className="space-y-1">
+                  <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Email *</label>
+                  <input
+                    type="email"
+                    className={`${boxInputClasses} ${vendorErrors.email ? 'border-red-500 focus:ring-red-500' : ''}`}
+                    value={newVendor.email}
+                    onChange={e => {
+                      setNewVendor({...newVendor, email: e.target.value});
+                      if (vendorErrors.email) {
+                        setVendorErrors({...vendorErrors, email: ''});
+                      }
+                    }}
+                    placeholder="vendor@company.com"
+                  />
+                  {vendorErrors.email && <p className="text-xs text-red-600 mt-1">{vendorErrors.email}</p>}
+                </div>
+
+                {/* Phone */}
+                <div className="space-y-1">
+                  <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Phone *</label>
+                  <input
+                    type="tel"
+                    className={`${boxInputClasses} ${vendorErrors.phone ? 'border-red-500 focus:ring-red-500' : ''}`}
+                    value={newVendor.phone}
+                    onChange={e => {
+                      setNewVendor({...newVendor, phone: e.target.value});
+                      if (vendorErrors.phone) {
+                        setVendorErrors({...vendorErrors, phone: ''});
+                      }
+                    }}
+                    placeholder="+91 9876543210"
+                  />
+                  {vendorErrors.phone && <p className="text-xs text-red-600 mt-1">{vendorErrors.phone}</p>}
+                </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Assign Lanes</label>
-                <div className="max-h-40 overflow-y-auto border border-slate-100 rounded-xl p-3 space-y-2">
-                  {lanes.map(l => (
-                    <label key={l.id} className="flex items-center space-x-3 cursor-pointer p-1 hover:bg-slate-50 rounded">
-                      <input 
-                        type="checkbox" 
-                        checked={newVendor.lanes.includes(l.name)}
-                        onChange={(e) => {
-                          const updated = e.target.checked 
-                            ? [...newVendor.lanes, l.name]
-                            : newVendor.lanes.filter(item => item !== l.name);
-                          setNewVendor({...newVendor, lanes: updated});
+
+              {/* Vehicle Types */}
+              <div className="space-y-3">
+                <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Vehicle Types *</label>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {Object.values(VehicleType).map(vehicleType => (
+                    <label
+                      key={vehicleType}
+                      className="flex items-center space-x-2 cursor-pointer p-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={newVendor.vehicleTypes.includes(vehicleType)}
+                        onChange={e => {
+                          const updated = e.target.checked
+                            ? [...newVendor.vehicleTypes, vehicleType]
+                            : newVendor.vehicleTypes.filter(vt => vt !== vehicleType);
+                          setNewVendor({...newVendor, vehicleTypes: updated});
+                          if (vendorErrors.vehicleTypes) {
+                            setVendorErrors({...vendorErrors, vehicleTypes: ''});
+                          }
                         }}
-                        className="w-4 h-4 text-blue-600 rounded" 
+                        className="w-4 h-4 text-blue-600 rounded"
                       />
-                      <span className="text-sm font-medium text-slate-700">{l.name}</span>
+                      <span className="text-sm font-medium text-slate-700">{vehicleType}</span>
                     </label>
                   ))}
                 </div>
+                {vendorErrors.vehicleTypes && (
+                  <p className="text-xs text-red-600">{vendorErrors.vehicleTypes}</p>
+                )}
               </div>
-              <div className="flex space-x-3 pt-4">
-                <button type="submit" className="flex-grow bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-50">Save Vendor</button>
-                <button type="button" onClick={() => setIsVendorModalOpen(false)} className="bg-slate-100 text-slate-600 px-6 rounded-xl font-bold">Cancel</button>
+
+              {/* Lanes */}
+              <div className="space-y-3">
+                <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Assign Lanes *</label>
+                <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-xl p-4 space-y-2 bg-slate-50">
+                  {lanes.length === 0 ? (
+                    <p className="text-sm text-slate-500">No lanes available. Please create lanes first.</p>
+                  ) : (
+                    lanes.map(l => (
+                      <label key={l.id} className="flex items-center space-x-3 cursor-pointer p-2 hover:bg-white rounded transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={newVendor.lanes.includes(l.name)}
+                          onChange={e => {
+                            const updated = e.target.checked
+                              ? [...newVendor.lanes, l.name]
+                              : newVendor.lanes.filter(item => item !== l.name);
+                            setNewVendor({...newVendor, lanes: updated});
+                            if (vendorErrors.lanes) {
+                              setVendorErrors({...vendorErrors, lanes: ''});
+                            }
+                          }}
+                          className="w-4 h-4 text-blue-600 rounded"
+                        />
+                        <span className="text-sm font-medium text-slate-700">{l.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {vendorErrors.lanes && <p className="text-xs text-red-600">{vendorErrors.lanes}</p>}
               </div>
             </form>
+
+            <div className="bg-slate-50 px-8 py-4 border-t flex space-x-3 sticky bottom-0">
+              <button
+                type="submit"
+                onClick={handleAddVendor}
+                disabled={loading}
+                className="flex-grow bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-100 transition-all"
+              >
+                {loading ? 'Saving...' : editingVendorId ? 'Update Vendor' : 'Create Vendor'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsVendorModalOpen(false);
+                  resetVendorForm();
+                }}
+                className="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 px-6 rounded-xl font-bold transition-all"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 z-[101] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col p-8">
+            <div className="flex justify-center mb-4">
+              <div className="bg-red-50 p-4 rounded-full">
+                <AlertCircle className="w-8 h-8 text-red-600" />
+              </div>
+            </div>
+            <h3 className="text-xl font-bold text-slate-800 text-center mb-2">Delete Vendor?</h3>
+            <p className="text-sm text-slate-600 text-center mb-6">
+              This vendor will be marked as deleted and cannot be used for bidding. This action cannot be undone.
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setDeleteConfirmId(null)}
+                className="flex-grow bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteVendor(deleteConfirmId)}
+                disabled={loading}
+                className="flex-grow bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white py-2.5 rounded-xl font-bold transition-all"
+              >
+                {loading ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}

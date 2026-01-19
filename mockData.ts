@@ -1,5 +1,5 @@
 
-import { User, UserRole, ShipmentBid, BidStatus, VehicleType, LoadType, Lane } from './types';
+import { User, UserRole, ShipmentBid, BidStatus, VehicleType, LoadType, Lane } from './src/types';
 
 export const MOCK_USERS: User[] = [
   { id: 'u-1', name: 'Admin User', role: UserRole.ADMIN },

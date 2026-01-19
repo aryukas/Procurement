@@ -16,7 +16,7 @@ import {
   X
 } from 'lucide-react';
 
-import { ShipmentBid, BidStatus, BidOffer, VehicleDetails, Notification, User } from '../types';
+import { ShipmentBid, BidStatus, BidOffer, VehicleDetails, Notification, User } from '../src/types';
 
 interface VehicleDetails {
   vehicleNumber: string;

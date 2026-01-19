@@ -2,7 +2,7 @@
 import { database } from '../firebase.ts';
 import { ref, set, get, push, update, onValue, off } from 'firebase/database';
 import { DB_PATHS, Bid, Shipment, User } from '../utils/dbStructure';
-import { ShipmentBid, BidStatus, BidOffer, VehicleDetails, Notification } from '../../types';
+import { ShipmentBid, BidStatus, BidOffer, VehicleDetails, Notification, Vendor } from '../types.ts';
 
 export class FirebaseService {
   // User operations
@@ -188,5 +188,97 @@ export class FirebaseService {
       }
     });
     return () => off(bidsRef);
+  }
+
+  // Vendor operations
+  static async createVendor(vendorData: Omit<Vendor, 'id' | 'createdAt' | 'updatedAt'>) {
+    try {
+      const newVendorRef = push(ref(database, `${DB_PATHS.USERS}`));
+      const vendorWithId: Vendor = {
+        ...vendorData,
+        id: newVendorRef.key!,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      await set(newVendorRef, vendorWithId);
+      return { success: true, vendorId: newVendorRef.key };
+    } catch (error) {
+      console.error('Error creating vendor:', error);
+      return { success: false, error };
+    }
+  }
+
+  static async getVendors() {
+    try {
+      const snapshot = await get(ref(database, DB_PATHS.USERS));
+      if (snapshot.exists()) {
+        return Object.values(snapshot.val())
+          .filter((user: any) => user.role === 'VENDOR' && !user.isDeleted)
+          .map((vendor: any) => ({ ...vendor, vehicleTypes: vendor.vehicleTypes || [] })) as Vendor[];
+      }
+      return [];
+    } catch (error) {
+      console.error('Error getting vendors:', error);
+      return [];
+    }
+  }
+
+  static async getVendor(vendorId: string) {
+    try {
+      const snapshot = await get(ref(database, `${DB_PATHS.USERS}/${vendorId}`));
+      if (snapshot.exists()) {
+        const vendor = snapshot.val();
+        if (vendor.role === 'VENDOR' && !vendor.isDeleted) {
+          return { ...vendor, vehicleTypes: vendor.vehicleTypes || [] } as Vendor;
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting vendor:', error);
+      return null;
+    }
+  }
+
+  static async updateVendor(vendorId: string, updates: Partial<Vendor>) {
+    try {
+      const updateData = {
+        ...updates,
+        updatedAt: new Date().toISOString()
+      };
+      await update(ref(database, `${DB_PATHS.USERS}/${vendorId}`), updateData);
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating vendor:', error);
+      return { success: false, error };
+    }
+  }
+
+  static async deleteVendor(vendorId: string) {
+    try {
+      // Soft delete
+      await update(ref(database, `${DB_PATHS.USERS}/${vendorId}`), {
+        isDeleted: true,
+        updatedAt: new Date().toISOString()
+      });
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting vendor:', error);
+      return { success: false, error };
+    }
+  }
+
+  static listenToVendors(callback: (vendors: Vendor[]) => void) {
+    const usersRef = ref(database, DB_PATHS.USERS);
+    onValue(usersRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const vendors = Object.values(snapshot.val())
+          .filter((user: any) => user.role === 'VENDOR' && !user.isDeleted)
+          .map((vendor: any) => ({ ...vendor, vehicleTypes: vendor.vehicleTypes || [] })) as Vendor[];
+        callback(vendors);
+      } else {
+        callback([]);
+      }
+    });
+    return () => off(usersRef);
   }
 }
