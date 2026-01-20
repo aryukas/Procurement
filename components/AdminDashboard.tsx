@@ -29,8 +29,11 @@ import {
 } from 'lucide-react';
 import { ShipmentBid, BidStatus, VehicleType, LoadType, Notification, User, UserRole, Lane } from '../types';
 import { INITIAL_LANES, MOCK_USERS } from '../mockData';
-import { useVendors, useLanes } from '../src/hooks/useFirebaseData';
+import { useVendors as useFirebaseVendors, useLanes as useFirebaseLanes } from '../src/hooks/useFirebaseData';
 import { FirebaseService } from '../src/services/firebaseService';
+import AuctionConsole from '../src/components/admin/AuctionConsole';
+import VendorMaster from '../src/components/admin/VendorMaster';
+import LaneMaster from '../src/components/admin/LaneMaster';
 
 interface AdminDashboardProps {
   bids: ShipmentBid[];
@@ -62,8 +65,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [now, setNow] = useState(new Date());
 
   // Use Firebase for vendors and lanes instead of local state
-  const { vendors, loading: vendorsLoading } = useVendors();
-  const { lanes, loading: lanesLoading } = useLanes();
+  const { vendors, loading: vendorsLoading } = useFirebaseVendors();
+  const { lanes, loading: lanesLoading } = useFirebaseLanes();
 
   // Vendor creation state
   const [vendorCreationStatus, setVendorCreationStatus] = useState<{ loading: boolean; error: string | null }>({ loading: false, error: null });
@@ -458,189 +461,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {activeTab === 'VENDORS' && (
-        <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
-          <div className="p-8 border-b border-slate-100 flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-slate-800">Vendor Master</h2>
-              <p className="text-sm text-slate-500">Manage transport partners and their operating lanes.</p>
-            </div>
-            <button 
-              onClick={() => {
-                setEditingVendor(null);
-                setNewVendor({ name: '', lanes: [] });
-                setIsVendorModalOpen(true);
-              }}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl flex items-center space-x-2 transition-all font-bold shadow-lg shadow-blue-50"
-            >
-              <Plus className="w-5 h-5" />
-              <span>Add New Vendor</span>
-            </button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest">
-                  <th className="px-8 py-4">Vendor Name</th>
-                  <th className="px-8 py-4">Associated Lanes</th>
-                  <th className="px-8 py-4">Status</th>
-                  <th className="px-8 py-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {vendorsLoading ? (
-                  <tr>
-                    <td colSpan={4} className="px-8 py-12 text-center">
-                      <div className="flex items-center justify-center space-x-2">
-                        <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                        <span className="text-slate-500 text-sm">Loading vendors...</span>
-                      </div>
-                    </td>
-                  </tr>
-                ) : vendors.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-8 py-12 text-center">
-                      <div className="text-slate-400">
-                        <Building2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                        <p className="text-sm font-medium">No vendors found</p>
-                        <p className="text-xs text-slate-400 mt-1">Add your first vendor to get started</p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  vendors
-                    .filter(vendor => vendor && vendor.name && vendor.name.trim() !== '') // Only show vendors with valid names
-                    .map(vendor => (
-                    <tr key={vendor.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-8 py-6">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600 font-bold">
-                            {vendor.name?.charAt(0)?.toUpperCase() || '?'}
-                          </div>
-                          <span className="font-bold text-slate-800">{vendor.name || 'Unnamed Vendor'}</span>
-                        </div>
-                      </td>
-                      <td className="px-8 py-6">
-                        <div className="flex flex-wrap gap-2">
-                          {vendor.lanes && vendor.lanes.length > 0 ? (
-                            vendor.lanes.map(l => (
-                              <span key={l} className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2.5 py-1 rounded-lg border border-slate-200">{l}</span>
-                            ))
-                          ) : (
-                            <span className="text-slate-400 text-[10px] italic">No lanes assigned</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-8 py-6">
-                        <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-tight">Active</span>
-                      </td>
-                      <td className="px-8 py-6">
-                        <button 
-                          onClick={() => handleEditVendorClick(vendor)}
-                          className="text-slate-400 hover:text-blue-600 transition-colors"
-                          title="Edit vendor"
-                        >
-                          <Settings className="w-5 h-5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <VendorMaster adminId="admin-user" />
       )}
 
       {activeTab === 'LANES' && (
-        <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
-          <div className="p-8 border-b border-slate-100 flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-slate-800">Lane Master</h2>
-              <p className="text-sm text-slate-500">Define operational routes and review vendor availability.</p>
-            </div>
-            <button 
-              onClick={() => setIsLaneModalOpen(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl flex items-center space-x-2 transition-all font-bold shadow-lg shadow-blue-50"
-            >
-              <Plus className="w-5 h-5" />
-              <span>Add New Lane</span>
-            </button>
-          </div>
-          <div className="p-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {lanesLoading ? (
-              Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="bg-slate-50 border border-slate-100 rounded-2xl p-6 animate-pulse">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="h-3 bg-slate-200 rounded w-12"></div>
-                    <div className="w-5 h-5 bg-slate-200 rounded"></div>
-                  </div>
-                  <div className="h-6 bg-slate-200 rounded mb-6"></div>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <div className="h-3 bg-slate-200 rounded w-24"></div>
-                      <div className="h-4 bg-slate-200 rounded w-6"></div>
-                    </div>
-                    <div className="flex -space-x-2">
-                      <div className="w-8 h-8 bg-slate-200 rounded-full"></div>
-                      <div className="w-8 h-8 bg-slate-200 rounded-full"></div>
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : lanes.filter(lane => lane && lane.origin && lane.destination && lane.name).length === 0 ? (
-              <div className="col-span-full text-center py-12">
-                <Route className="w-16 h-16 mx-auto mb-4 text-slate-300" />
-                <h3 className="text-lg font-bold text-slate-600 mb-2">No lanes defined</h3>
-                <p className="text-slate-500 mb-6">Create your first operational route to get started</p>
-                <button 
-                  onClick={() => setIsLaneModalOpen(true)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-blue-50"
-                >
-                  Add First Lane
-                </button>
-              </div>
-            ) : (
-              lanes
-                .filter(lane => lane && lane.origin && lane.destination && lane.name) // Only show complete lanes
-                .map(lane => {
-                const assignedVendors = vendors.filter(v => v.lanes?.includes(lane.name));
-                return (
-                  <div key={lane.id} className="bg-slate-50 border border-slate-100 rounded-2xl p-6 hover:shadow-md transition-all group">
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-[10px] text-blue-500 font-black uppercase tracking-widest">{lane.id?.slice(-6) || 'N/A'}</span>
-                      <Route className="w-5 h-5 text-slate-300 group-hover:text-blue-500 transition-colors" />
-                    </div>
-                    <h4 className="text-lg font-bold text-slate-800 flex items-center mb-6">
-                      {lane.origin || 'Unknown'} <ArrowRight className="w-3 h-3 mx-3 text-slate-300" /> {lane.destination || 'Unknown'}
-                    </h4>
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-slate-500 font-medium">Operating Vendors</span>
-                        <span className="font-bold text-slate-800">{assignedVendors.length}</span>
-                      </div>
-                      <div className="flex -space-x-2 overflow-hidden">
-                        {assignedVendors.length > 0 ? (
-                          assignedVendors.slice(0, 3).map(v => (
-                            <div key={v.id} title={v.name} className="inline-block h-8 w-8 rounded-full ring-2 ring-white bg-blue-500 flex items-center justify-center text-[10px] text-white font-bold uppercase">
-                              {v.name?.charAt(0) || '?'}
-                            </div>
-                          ))
-                        ) : (
-                          <div className="text-[10px] text-slate-400 italic">No vendors assigned</div>
-                        )}
-                        {assignedVendors.length > 3 && (
-                          <div className="inline-block h-8 w-8 rounded-full ring-2 ring-white bg-slate-200 flex items-center justify-center text-[10px] text-slate-600 font-bold">
-                            +{assignedVendors.length - 3}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
+        <LaneMaster adminId="admin-user" />
       )}
 
       {/* New Bid Modal */}
@@ -747,50 +572,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col p-8">
             <h3 className="text-xl font-bold text-slate-800 mb-6">
-              {editingVendor ? 'Edit Vendor' : 'Create New Vendor'}
+              {editingVendor ? 'Edit Vendor (Legacy)' : 'Create New Vendor (Legacy)'}
             </h3>
-            {vendorCreationStatus.error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
-                <p className="text-sm font-medium">{vendorCreationStatus.error}</p>
-              </div>
-            )}
-            <form onSubmit={editingVendor ? handleEditVendor : handleAddVendor} className="space-y-6">
-              <div className="space-y-1">
-                <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Vendor Entity Name</label>
-                <input required className={boxInputClasses} value={newVendor.name} onChange={e => setNewVendor({...newVendor, name: e.target.value})} placeholder="e.g. Express Haulers Ltd." disabled={vendorCreationStatus.loading} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Assign Lanes</label>
-                <div className="max-h-40 overflow-y-auto border border-slate-100 rounded-xl p-3 space-y-2">
-                  {lanes.map(l => (
-                    <label key={l.id} className="flex items-center space-x-3 cursor-pointer p-1 hover:bg-slate-50 rounded">
-                      <input 
-                        type="checkbox" 
-                        checked={newVendor.lanes.includes(l.name)}
-                        onChange={(e) => {
-                          const updated = e.target.checked 
-                            ? [...newVendor.lanes, l.name]
-                            : newVendor.lanes.filter(item => item !== l.name);
-                          setNewVendor({...newVendor, lanes: updated});
-                        }}
-                        className="w-4 h-4 text-blue-600 rounded"
-                        disabled={vendorCreationStatus.loading}
-                      />
-                      <span className="text-sm font-medium text-slate-700">{l.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="flex space-x-3 pt-4">
-                <button type="submit" className="flex-grow bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled={vendorCreationStatus.loading}>
-                  {vendorCreationStatus.loading 
-                    ? (editingVendor ? 'Updating...' : 'Creating...') 
-                    : (editingVendor ? 'Update Vendor' : 'Save Vendor')
-                  }
-                </button>
-                <button type="button" onClick={handleCancelEdit} className="bg-slate-100 text-slate-600 px-6 rounded-xl font-bold" disabled={vendorCreationStatus.loading}>Cancel</button>
-              </div>
-            </form>
+            <p className="text-gray-600 text-sm mb-4">Use the Vendor Master tab for the new interface</p>
+            <div className="flex space-x-3 pt-4">
+              <button type="button" onClick={() => {
+                setEditingVendor(null);
+                setNewVendor({ name: '', lanes: [] });
+                setIsVendorModalOpen(false);
+              }} className="flex-grow bg-slate-100 text-slate-600 px-6 rounded-xl font-bold">Close</button>
+            </div>
           </div>
         </div>
       )}
@@ -799,21 +590,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {isLaneModalOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col p-8">
-            <h3 className="text-xl font-bold text-slate-800 mb-6">Define New Route</h3>
-            <form onSubmit={handleAddLane} className="space-y-6">
-              <div className="space-y-1">
-                <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Origin City</label>
-                <input required className={boxInputClasses} value={newLane.origin} onChange={e => setNewLane({...newLane, origin: e.target.value})} placeholder="e.g. Hyderabad" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Destination City</label>
-                <input required className={boxInputClasses} value={newLane.destination} onChange={e => setNewLane({...newLane, destination: e.target.value})} placeholder="e.g. Pune" />
-              </div>
-              <div className="flex space-x-3 pt-4">
-                <button type="submit" className="flex-grow bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-50">Register Lane</button>
-                <button type="button" onClick={() => setIsLaneModalOpen(false)} className="bg-slate-100 text-slate-600 px-6 rounded-xl font-bold">Cancel</button>
-              </div>
-            </form>
+            <h3 className="text-xl font-bold text-slate-800 mb-6">Define New Route (Legacy)</h3>
+            <p className="text-gray-600 text-sm mb-4">Use the Lane Master tab for the new interface</p>
+            <div className="flex space-x-3 pt-4">
+              <button type="button" onClick={() => setIsLaneModalOpen(false)} className="flex-grow bg-slate-100 text-slate-600 px-6 rounded-xl font-bold">Close</button>
+            </div>
           </div>
         </div>
       )}

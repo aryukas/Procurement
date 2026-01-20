@@ -123,3 +123,63 @@ export interface Notification {
   read: boolean;
   type: 'info' | 'success' | 'warning' | 'alert';
 }
+
+// ─────────────────────────────────────────────────
+// ADMIN MODULES - Auction Console, Vendor Master, Lane Master
+// ─────────────────────────────────────────────────
+
+export enum AuctionStatus {
+  DRAFT = 'DRAFT',
+  ACTIVE = 'ACTIVE',
+  CLOSED = 'CLOSED',
+  CANCELLED = 'CANCELLED'
+}
+
+// Lane Master
+export interface LaneMaster {
+  id: string;
+  code: string; // e.g., "DELHI-MUMBAI"
+  origin: string; // e.g., "DELHI"
+  destination: string; // e.g., "MUMBAI"
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string; // Admin ID
+}
+
+// Vendor Master
+export interface VendorMaster {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  vehicleTypes: VehicleType[];
+  assignedLanes: string[]; // Lane IDs
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string; // Admin ID
+  notes?: string;
+}
+
+// Auction Console (Shipment Bids)
+export interface AuctionMaster {
+  id: string; // Auto-generated auction ID
+  laneId: string; // Reference to Lane Master
+  vehicleType: VehicleType;
+  loadType: LoadType;
+  materialType: string;
+  capacity: string; // e.g., "20 Tons"
+  bidStartDate: string; // ISO date string
+  bidStartTime: string; // ISO time string
+  bidEndDate: string; // ISO date string
+  bidEndTime: string; // ISO time string
+  ceilingPrice: number; // Max bid price
+  stepValue: number; // Min step down
+  status: AuctionStatus;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string; // Admin ID
+  softDeleted: boolean; // For soft delete
+  deletedAt?: string;
+}
