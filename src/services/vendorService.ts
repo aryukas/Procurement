@@ -3,6 +3,7 @@ import {
   collection,
   addDoc,
   updateDoc,
+  deleteDoc,
   doc,
   getDocs,
   getDoc,
@@ -153,7 +154,7 @@ export class VendorService {
   }
 
   /**
-   * Soft delete vendor (mark as inactive) - prevent if active bids
+   * Hard delete vendor - permanently removes from database
    */
   static async deleteVendor(vendorId: string): Promise<{ success: boolean; error?: any }> {
     try {
@@ -162,13 +163,9 @@ export class VendorService {
         throw new Error('Vendor not found');
       }
 
-      // Check for active bids (would need to query bids collection)
-      // For now, just soft delete by marking inactive
+      // Perform hard delete - permanently remove from database
       const docRef = doc(firestore, COLLECTION, vendorId);
-      await updateDoc(docRef, {
-        isActive: false,
-        updatedAt: new Date().toISOString()
-      });
+      await deleteDoc(docRef);
 
       return { success: true };
     } catch (error) {
