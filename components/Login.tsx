@@ -1,16 +1,29 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Infinity, ShieldCheck, TruckIcon } from 'lucide-react';
 import { MOCK_USERS } from '../mockData';
 import { User, UserRole } from '../types';
 import { useVendors } from '../src/hooks/useFirebaseData';
+import AdminAuth from '../src/components/admin/AdminAuth';
 
 interface LoginProps {
   onLogin: (user: User) => void;
 }
 
+type LoginMode = 'user' | 'admin';
+
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const { vendors, loading: vendorsLoading } = useVendors();
+  const [loginMode, setLoginMode] = useState<LoginMode>('user');
+
+  // If admin auth mode, show admin login/signup
+  if (loginMode === 'admin') {
+    return (
+      <AdminAuth onLoginSuccess={(admin) => {
+        onLogin(admin);
+      }} />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900 flex items-center justify-center p-4">
@@ -47,11 +60,32 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             {/* Admin Option */}
             <div className="border-b pb-4 mb-4">
               <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Internal</p>
+              
+              {/* Admin Auth Button */}
+              <button
+                onClick={() => setLoginMode('admin')}
+                className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-slate-100 hover:border-blue-500 hover:bg-blue-50 transition-all group"
+              >
+                <div className="flex items-center space-x-4">
+                  <div className="bg-blue-100 p-2 rounded-lg group-hover:bg-blue-200 transition-colors">
+                    <ShieldCheck className="w-6 h-6 text-blue-700" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-bold text-slate-800">Admin Login</p>
+                    <p className="text-xs text-slate-500">Username & Password Authentication</p>
+                  </div>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-blue-500 transition-colors">
+                  <div className="w-2 h-2 rounded-full bg-slate-300 group-hover:bg-white"></div>
+                </div>
+              </button>
+
+              {/* Legacy Admin Option */}
               {MOCK_USERS.filter(u => u.role === UserRole.ADMIN).map(user => (
                 <button
                   key={user.id}
                   onClick={() => onLogin(user)}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-slate-100 hover:border-blue-500 hover:bg-blue-50 transition-all group"
+                  className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-slate-100 hover:border-blue-500 hover:bg-blue-50 transition-all group mt-2"
                 >
                   <div className="flex items-center space-x-4">
                     <div className="bg-blue-100 p-2 rounded-lg group-hover:bg-blue-200 transition-colors">
@@ -59,7 +93,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     </div>
                     <div className="text-left">
                       <p className="font-bold text-slate-800">{user.name}</p>
-                      <p className="text-xs text-slate-500">Fleet Administrator</p>
+                      <p className="text-xs text-slate-500">Fleet Administrator (Demo)</p>
                     </div>
                   </div>
                   <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-blue-500 transition-colors">
