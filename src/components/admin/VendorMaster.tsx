@@ -284,7 +284,6 @@ const VendorMasterComponent: React.FC<VendorMasterProps> = ({ adminId }) => {
               <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Phone</th>
               <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Lanes</th>
               <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Status</th>
-              <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
@@ -491,11 +490,11 @@ const VendorMasterComponent: React.FC<VendorMasterProps> = ({ adminId }) => {
               <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 rounded-full">
                 <AlertCircle className="text-red-600" size={24} />
               </div>
-              <h3 className="mt-4 text-lg font-bold text-gray-900 text-center">Delete Vendor?</h3>
+              <h3 className="mt-4 text-lg font-bold text-gray-900 text-center">Delete Vendor Permanently?</h3>
               <p className="mt-2 text-sm text-gray-600 text-center">
-                Are you sure you want to delete <strong>{selectedVendor.name}</strong>?
+                Are you sure you want to permanently delete <strong>{selectedVendor.name}</strong>?
                 <br />
-                The vendor will be marked as inactive.
+                <span className="text-red-600 font-semibold">This action cannot be undone.</span>
               </p>
             </div>
             <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 flex justify-end gap-3">

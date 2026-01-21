@@ -27,8 +27,8 @@ import {
   Building2,
   Route
 } from 'lucide-react';
-import { ShipmentBid, BidStatus, VehicleType, LoadType, Notification, User, UserRole, Lane } from '../types';
-import { INITIAL_LANES, MOCK_USERS } from '../mockData';
+import type { ShipmentBid, Notification, User, Lane } from '../types';
+import { BidStatus, VehicleType, LoadType, UserRole } from '../types';
 import { useVendors as useFirebaseVendors, useLanes as useFirebaseLanes } from '../src/hooks/useFirebaseData';
 import { FirebaseService } from '../src/services/firebaseService';
 import AuctionConsole from '../src/components/admin/AuctionConsole';
@@ -185,11 +185,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const vendorData = {
       name: newVendor.name,
       role: UserRole.VENDOR,
-      lanes: newVendor.lanes
+      lanes: newVendor.lanes,
+      email: '',
+      uid: '',
+      createdAt: Date.now()
     };
 
     try {
-      const result = await FirebaseService.createVendor(vendorData);
+      const result = await FirebaseService.createVendor(vendorData as any);
       if (result.success) {
         setNewVendor({ name: '', lanes: [] });
         setIsVendorModalOpen(false);

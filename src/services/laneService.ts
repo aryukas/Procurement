@@ -3,6 +3,7 @@ import {
   collection,
   addDoc,
   updateDoc,
+  deleteDoc,
   doc,
   getDocs,
   getDoc,
@@ -147,8 +148,8 @@ export class LaneService {
   }
 
   /**
-   * Soft delete lane (mark as inactive) - prevent if linked to auctions
-   * Note: Caller should verify no auctions before calling
+   * Hard delete lane - permanently removes from database
+   * Caller should verify no linked auctions exist before calling
    */
   static async deleteLane(laneId: string): Promise<{ success: boolean; error?: any }> {
     try {
@@ -157,11 +158,9 @@ export class LaneService {
         throw new Error('Lane not found');
       }
 
+      // Perform hard delete - permanently remove from database
       const docRef = doc(firestore, COLLECTION, laneId);
-      await updateDoc(docRef, {
-        isActive: false,
-        updatedAt: new Date().toISOString()
-      });
+      await deleteDoc(docRef);
 
       return { success: true };
     } catch (error) {
