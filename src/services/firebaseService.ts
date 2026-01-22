@@ -284,6 +284,16 @@ export class FirebaseService {
     }
   }
 
+  static async deleteShipmentBid(bidId: string) {
+    try {
+      await set(ref(database, `${DB_PATHS.BIDS}/${bidId}`), null);
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting shipment bid:', error);
+      return { success: false, error };
+    }
+  }
+
   // Real-time listeners for ShipmentBid
   static listenToShipmentBids(callback: (bids: ShipmentBid[]) => void) {
     const bidsRef = ref(database, DB_PATHS.BIDS);

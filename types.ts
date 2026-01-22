@@ -135,6 +135,54 @@ export enum AuctionStatus {
   CANCELLED = 'CANCELLED'
 }
 
+// ─────────────────────────────────────────────────
+// SIMPLE BIDDING SYSTEM - Vendor Bids
+// ─────────────────────────────────────────────────
+
+export enum VendorBidStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED'
+}
+
+export enum ShipmentStatus {
+  OPEN = 'OPEN',
+  PENDING_ADMIN_APPROVAL = 'PENDING_ADMIN_APPROVAL',
+  FINALIZED = 'FINALIZED',
+  CLOSED = 'CLOSED'
+}
+
+export interface SimpleShipment {
+  id: string;
+  origin: string;
+  destination: string;
+  vehicleType: VehicleType;
+  loadType: LoadType;
+  capacity: string;
+  material: string;
+  pickupDate: string;
+  deliveryDate: string;
+  status: ShipmentStatus;
+  createdAt: string;
+  updatedAt?: string;
+  createdBy: string; // Admin ID
+  winningVendorId?: string;
+  winningBidId?: string;
+  finalAmount?: number;
+  auctionClosedAt?: string;
+}
+
+export interface VendorBid {
+  id: string;
+  shipmentId: string;
+  vendorId: string;
+  vendorName: string;
+  bidAmount: number;
+  status: VendorBidStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Lane Master
 export interface LaneMaster {
   id: string;
@@ -182,4 +230,41 @@ export interface AuctionMaster {
   createdBy: string; // Admin ID
   softDeleted: boolean; // For soft delete
   deletedAt?: string;
+}
+
+// ─────────────────────────────────────────────────
+// LIVE REVERSE AUCTION SYSTEM
+// ─────────────────────────────────────────────────
+
+export enum LiveAuctionStatus {
+  ACTIVE = 'ACTIVE',
+  CLOSED = 'CLOSED',
+  EXPIRED = 'EXPIRED'
+}
+
+export interface LiveAuction {
+  id: string;
+  laneId: string;
+  status: LiveAuctionStatus;
+  startTime: string; // ISO timestamp
+  endTime: string; // ISO timestamp
+  createdBy: string; // Admin ID
+  createdAt: string;
+  updatedAt: string;
+  lowestBid?: number;
+  lowestBidVendorId?: string;
+  winningBidId?: string;
+}
+
+export interface ReverseBid {
+  id: string;
+  auctionId: string;
+  laneId: string;
+  vendorId: string;
+  vendorName: string;
+  amount: number;
+  status: 'ACTIVE' | 'REVISED' | 'OUTBID' | 'APPROVED';
+  createdAt: string;
+  updatedAt: string;
+  revisedFrom?: string; // Previous bid ID if this is a revision
 }

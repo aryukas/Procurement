@@ -1,15 +1,13 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Plus, 
-  ChevronRight, 
   ArrowRight, 
   MapPin, 
   Clock, 
   Truck, 
   Users, 
   BarChart3,
-  TrendingDown,
   ChevronDown,
   ChevronUp,
   X,
@@ -25,23 +23,25 @@ import {
   Globe,
   Settings,
   Building2,
-  Route
+  Route,
+  Edit2,
+  Trash2,
+  TrendingDown
 } from 'lucide-react';
-import type { ShipmentBid, Notification, User, Lane } from '../types';
+import type { ShipmentBid, User, Lane } from '../types';
 import { BidStatus, VehicleType, LoadType, UserRole } from '../types';
 import { useVendors as useFirebaseVendors, useLanes as useFirebaseLanes } from '../src/hooks/useFirebaseData';
 import { FirebaseService } from '../src/services/firebaseService';
-import AuctionConsole from '../src/components/admin/AuctionConsole';
 import VendorMaster from '../src/components/admin/VendorMaster';
 import LaneMaster from '../src/components/admin/LaneMaster';
+import AdminBidReview from '../src/components/bidding/AdminBidReview';
+
 
 interface AdminDashboardProps {
   bids: ShipmentBid[];
   onCreateBid: (bid: Partial<ShipmentBid>) => void;
   onCloseBid: (id: string) => void;
-  onCounter: (id: string, amount: number) => void;
-  onFinalize: (id: string, vendorId: string, amount: number) => void;
-  notifications: Notification[];
+  notifications?: User[]; // Changed from Notification[] - unused prop
 }
 
 type AdminTab = 'AUCTIONS' | 'VENDORS' | 'LANES';
@@ -49,37 +49,42 @@ type AdminTab = 'AUCTIONS' | 'VENDORS' | 'LANES';
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
   bids, 
   onCreateBid, 
-  onCloseBid, 
-  onCounter, 
-  onFinalize,
-  notifications 
+  onCloseBid
 }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('AUCTIONS');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isVendorModalOpen, setIsVendorModalOpen] = useState(false);
-  const [isLaneModalOpen, setIsLaneModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   
   const [selectedBid, setSelectedBid] = useState<ShipmentBid | null>(null);
-  const [counterAmount, setCounterAmount] = useState('');
+  const [bidToDelete, setBidToDelete] = useState<ShipmentBid | null>(null);
+  const [bidToEdit, setBidToEdit] = useState<ShipmentBid | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [now, setNow] = useState(new Date());
 
-  // Use Firebase for vendors and lanes instead of local state
-  const { vendors, loading: vendorsLoading } = useFirebaseVendors();
-  const { lanes, loading: lanesLoading } = useFirebaseLanes();
+  // Loading states
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Vendor creation state
-  const [vendorCreationStatus, setVendorCreationStatus] = useState<{ loading: boolean; error: string | null }>({ loading: false, error: null });
-  const [editingVendor, setEditingVendor] = useState<User | null>(null);
+  // Use Firebase for vendors and lanes
+  const { vendors } = useFirebaseVendors();
+  const { lanes } = useFirebaseLanes();
 
-  // Form States for Masters
-  const [newVendor, setNewVendor] = useState({ name: '', lanes: [] as string[] });
-  const [newLane, setNewLane] = useState({ origin: '', destination: '' });
+  // Form state for edit modal
+  const [editFormData, setEditFormData] = useState<Partial<ShipmentBid>>({});
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (feedbackMessage) {
+      const timer = setTimeout(() => setFeedbackMessage(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [feedbackMessage]);
 
   const [expandedSections, setExpandedSections] = useState({
     summary: true,
@@ -135,16 +140,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return [...new Set(availableDestinations)].sort();
   }, [lanes, newBid.pickupCity]);
 
-  const getBidLifecycleStatus = (bid: ShipmentBid) => {
+  const editPickupCities = useMemo(() => {
+    const uniqueOrigins = [...new Set(lanes.map(lane => lane.origin))];
+    return uniqueOrigins.sort();
+  }, [lanes]);
+
+  const editDeliveryCities = useMemo(() => {
+    if (!editFormData.pickupCity) return [];
+    const availableDestinations = lanes
+      .filter(lane => lane.origin === editFormData.pickupCity)
+      .map(lane => lane.destination);
+    return [...new Set(availableDestinations)].sort();
+  }, [lanes, editFormData.pickupCity]);
+
+  // Callback handlers
+  const getBidLifecycleStatus = useCallback((bid: ShipmentBid): string => {
     if (bid.status === BidStatus.FINALIZED || bid.status === BidStatus.ASSIGNED) return "Completed";
     const start = new Date(`${bid.bidStartDate}T${bid.bidStartTime}`);
     const end = new Date(`${bid.bidEndDate}T${bid.bidEndTime}`);
     if (now < start) return "Not Started Yet";
     if (now >= end || bid.status === BidStatus.CLOSED) return "Completed";
     return "In Process";
-  };
+  }, [now]);
 
-  const getTimeRemaining = (bid: ShipmentBid) => {
+  const getTimeRemaining = useCallback((bid: ShipmentBid): string => {
     const end = new Date(`${bid.bidEndDate}T${bid.bidEndTime}`);
     const diff = end.getTime() - now.getTime();
     if (diff <= 0) return "Ended";
@@ -152,16 +171,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
     const secs = Math.floor((diff % (1000 * 60)) / 1000);
     return `${hours}h ${mins}m ${secs}s`;
-  };
+  }, [now]);
 
   const activeBidsCount = useMemo(() => {
     return bids.filter(b => getBidLifecycleStatus(b) === "In Process").length;
-  }, [bids, now]);
+  }, [bids, getBidLifecycleStatus]);
 
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
+  // ─────────────────────────────────────────────────
+  // CREATE BID HANDLER
+  // ─────────────────────────────────────────────────
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const processedBid = {
@@ -176,93 +198,115 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     };
     onCreateBid(processedBid);
     setIsModalOpen(false);
+    setFeedbackMessage({ type: 'success', text: 'Bid created successfully!' });
+    // Reset form
+    setNewBid({
+      requestByCustomer: '',
+      requestDate: new Date().toISOString().split('T')[0],
+      loadType: LoadType.FTL,
+      capacity: '',
+      entryLocation: '',
+      product: '',
+      packagingType: '',
+      noOfPackages: 0,
+      weightKg: 0,
+      comments: '',
+      pickupParty: '',
+      pickupDate: new Date().toISOString().split('T')[0],
+      pickupPincode: '',
+      pickupLocation: '',
+      pickupCity: '',
+      pickupAddress: '',
+      deliveryParty: '',
+      deliveryDate: new Date().toISOString().split('T')[0],
+      deliveryPincode: '',
+      deliveryLocation: '',
+      deliveryCity: '',
+      deliveryAddress: '',
+      reservedPrice: 0,
+      ceilingRate: 0,
+      stepValue: 0,
+      bidStartDate: new Date().toISOString().split('T')[0],
+      bidStartTime: '16:10',
+      bidEndDate: new Date().toISOString().split('T')[0],
+      bidEndTime: '18:00',
+      showL1Value: false,
+      vehicleType: VehicleType.TRUCK
+    });
   };
 
-  const handleAddVendor = async (e: React.FormEvent) => {
+  // ─────────────────────────────────────────────────
+  // EDIT BID HANDLERS
+  // ─────────────────────────────────────────────────
+  const handleEditClick = (bid: ShipmentBid) => {
+    setBidToEdit(bid);
+    setEditFormData({ ...bid });
+    setIsEditModalOpen(true);
+    setSelectedBid(null);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setVendorCreationStatus({ loading: true, error: null });
+    if (!bidToEdit?.id) return;
 
-    const vendorData = {
-      name: newVendor.name,
-      role: UserRole.VENDOR,
-      lanes: newVendor.lanes,
-      email: '',
-      uid: '',
-      createdAt: Date.now()
-    };
-
+    setIsUpdating(true);
     try {
-      const result = await FirebaseService.createVendor(vendorData as any);
+      const result = await FirebaseService.updateShipmentBid(bidToEdit.id, editFormData);
       if (result.success) {
-        setNewVendor({ name: '', lanes: [] });
-        setIsVendorModalOpen(false);
-        setVendorCreationStatus({ loading: false, error: null });
-        // The vendors list will automatically update via the useVendors hook
+        setFeedbackMessage({ type: 'success', text: 'Bid updated successfully!' });
+        setIsEditModalOpen(false);
+        setBidToEdit(null);
+        setEditFormData({});
       } else {
-        setVendorCreationStatus({ loading: false, error: result.error?.message || 'Failed to create vendor' });
+        setFeedbackMessage({ type: 'error', text: 'Failed to update bid. Please try again.' });
       }
     } catch (error) {
-      console.error('Error creating vendor:', error);
-      setVendorCreationStatus({ loading: false, error: 'An unexpected error occurred' });
+      console.error('Error updating bid:', error);
+      setFeedbackMessage({ type: 'error', text: 'An error occurred while updating the bid.' });
+    } finally {
+      setIsUpdating(false);
     }
   };
 
-  const handleEditVendor = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingVendor) return;
+  const handleEditCancel = () => {
+    setIsEditModalOpen(false);
+    setBidToEdit(null);
+    setEditFormData({});
+  };
 
-    setVendorCreationStatus({ loading: true, error: null });
+  // ─────────────────────────────────────────────────
+  // DELETE BID HANDLERS
+  // ─────────────────────────────────────────────────
+  const handleDeleteClick = (bid: ShipmentBid) => {
+    setBidToDelete(bid);
+    setIsDeleteConfirmOpen(true);
+    setSelectedBid(null);
+  };
 
-    const updates = {
-      name: newVendor.name,
-      lanes: newVendor.lanes
-    };
+  const handleDeleteConfirm = async () => {
+    if (!bidToDelete?.id) return;
 
+    setIsDeleting(true);
     try {
-      const result = await FirebaseService.updateVendor(editingVendor.id, updates);
+      const result = await FirebaseService.deleteShipmentBid(bidToDelete.id);
       if (result.success) {
-        setNewVendor({ name: '', lanes: [] });
-        setIsVendorModalOpen(false);
-        setEditingVendor(null);
-        setVendorCreationStatus({ loading: false, error: null });
-        // The vendors list will automatically update via the useVendors hook
+        setFeedbackMessage({ type: 'success', text: 'Bid deleted successfully!' });
+        setIsDeleteConfirmOpen(false);
+        setBidToDelete(null);
       } else {
-        setVendorCreationStatus({ loading: false, error: result.error?.message || 'Failed to update vendor' });
+        setFeedbackMessage({ type: 'error', text: 'Failed to delete bid. Please try again.' });
       }
     } catch (error) {
-      console.error('Error updating vendor:', error);
-      setVendorCreationStatus({ loading: false, error: 'An unexpected error occurred' });
+      console.error('Error deleting bid:', error);
+      setFeedbackMessage({ type: 'error', text: 'An error occurred while deleting the bid.' });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
-  const handleEditVendorClick = (vendor: User) => {
-    setEditingVendor(vendor);
-    setNewVendor({ name: vendor.name, lanes: vendor.lanes || [] });
-    setIsVendorModalOpen(true);
-  };
-
-  const handleCancelEdit = () => {
-    setEditingVendor(null);
-    setNewVendor({ name: '', lanes: [] });
-    setIsVendorModalOpen(false);
-    setVendorCreationStatus({ loading: false, error: null });
-  };
-
-  const handleAddLane = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const laneData = {
-      origin: newLane.origin,
-      destination: newLane.destination
-    };
-    
-    const result = await FirebaseService.createLane(laneData);
-    if (result.success) {
-      setNewLane({ origin: '', destination: '' });
-      setIsLaneModalOpen(false);
-    } else {
-      console.error('Failed to create lane:', result.error);
-      // You could add error handling UI here
-    }
+  const handleDeleteCancel = () => {
+    setIsDeleteConfirmOpen(false);
+    setBidToDelete(null);
   };
 
   const getStatusColor = (status: string) => {
@@ -373,6 +417,31 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   return (
                     <div key={`${bid.id}-${now.getTime()}`} onClick={() => setSelectedBid(bid)} className={`bg-white border p-5 rounded-2xl cursor-pointer transition-all hover:shadow-lg relative overflow-hidden group ${isSelected ? 'border-blue-500 ring-4 ring-blue-50' : 'border-slate-200'}`}>
                       <div className={`absolute top-0 left-0 w-1 h-full ${lifecycle === 'In Process' ? 'bg-rose-500' : lifecycle === 'Completed' ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
+                      
+                      {/* Action buttons - top right */}
+                      <div className="absolute top-3 right-3 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditClick(bid);
+                          }}
+                          className="p-1.5 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                          title="Edit bid"
+                        >
+                          <Edit2 className="w-4 h-4 text-blue-600" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteClick(bid);
+                          }}
+                          className="p-1.5 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                          title="Delete bid"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        </button>
+                      </div>
+
                       <div className="flex justify-between items-start mb-3">
                         <div className="space-y-0.5">
                           <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">{bid.id} • {bid.lane}</p>
@@ -486,6 +555,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               )}
             </div>
           </div>
+
+          {/* Vendor Bids Section */}
+          <div className="mt-12 bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <h2 className="text-2xl font-bold text-slate-900 mb-6">Vendor Bids</h2>
+            <AdminBidReview onApprovalComplete={() => {}} />
+          </div>
         </>
       )}
 
@@ -596,37 +671,162 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* Vendor Master Modal */}
-      {isVendorModalOpen && (
+      {/* Edit Bid Modal */}
+      {isEditModalOpen && bidToEdit && (
         <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col p-8">
-            <h3 className="text-xl font-bold text-slate-800 mb-6">
-              {editingVendor ? 'Edit Vendor (Legacy)' : 'Create New Vendor (Legacy)'}
-            </h3>
-            <p className="text-gray-600 text-sm mb-4">Use the Vendor Master tab for the new interface</p>
-            <div className="flex space-x-3 pt-4">
-              <button type="button" onClick={() => {
-                setEditingVendor(null);
-                setNewVendor({ name: '', lanes: [] });
-                setIsVendorModalOpen(false);
-              }} className="flex-grow bg-slate-100 text-slate-600 px-6 rounded-xl font-bold">Close</button>
+          <div className="bg-[#f3f4f6] rounded-xl w-full max-w-6xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+            <div className="bg-white px-6 py-4 border-b flex items-center justify-between">
+              <h3 className="text-xl font-medium text-slate-700">Edit Bid - {bidToEdit.id}</h3>
+              <button onClick={handleEditCancel} className="p-1 hover:bg-slate-100 rounded-lg"><X className="w-5 h-5 text-slate-400" /></button>
+            </div>
+            <form onSubmit={handleEditSubmit} className="flex-grow overflow-y-auto p-6 space-y-6">
+              <div className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
+                <button type="button" onClick={() => toggleSection('summary')} className="w-full px-6 py-3 flex items-center justify-between border-b hover:bg-slate-50 transition-colors">
+                  <span className="text-sm font-bold text-slate-700">Request Summary</span>
+                  {expandedSections.summary ? <ChevronUp className="w-4 h-4 text-slate-400"/> : <ChevronDown className="w-4 h-4 text-slate-400"/>}
+                </button>
+                {expandedSections.summary && (
+                  <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-6">
+                    <div className="space-y-1">
+                      <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Request by Customer</label>
+                      <input className={inputClasses} value={editFormData.requestByCustomer || ''} onChange={e => setEditFormData({...editFormData, requestByCustomer: e.target.value})} />
+                    </div>
+                    <div className="space-y-1 relative">
+                      <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Request Date</label>
+                      <div className="flex items-center border-b border-slate-200"><input type="date" className="w-full py-1.5 text-sm text-slate-900 font-medium outline-none bg-transparent" value={editFormData.requestDate || ''} onChange={e => setEditFormData({...editFormData, requestDate: e.target.value})} /><Calendar className="w-4 h-4 text-slate-400 ml-2" /></div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Load Type</label>
+                      <select className={inputClasses} value={editFormData.loadType || LoadType.FTL} onChange={e => setEditFormData({...editFormData, loadType: e.target.value as LoadType})}><option value={LoadType.FTL}>FTL</option><option value={LoadType.LTL}>LTL</option></select>
+                    </div>
+                    <div className="space-y-1"><label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Capacity</label><input className={inputClasses} value={editFormData.capacity || ''} onChange={e => setEditFormData({...editFormData, capacity: e.target.value})} /></div>
+                    <div className="space-y-1"><label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Product</label><input className={inputClasses} value={editFormData.product || ''} onChange={e => setEditFormData({...editFormData, product: e.target.value})} /></div>
+                    <div className="space-y-1"><label className="text-xs text-slate-500 font-bold uppercase tracking-tight">No of Packages</label><input type="number" className={inputClasses} value={editFormData.noOfPackages || 0} onChange={e => setEditFormData({...editFormData, noOfPackages: parseInt(e.target.value) || 0})} /></div>
+                    <div className="space-y-1"><label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Weight (Kg)</label><input type="number" className={inputClasses} value={editFormData.weightKg || 0} onChange={e => setEditFormData({...editFormData, weightKg: parseInt(e.target.value) || 0})} /></div>
+                  </div>
+                )}
+              </div>
+
+              {/* Pickup Section */}
+              <div className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
+                <button type="button" onClick={() => toggleSection('pickup')} className="w-full px-6 py-3 flex items-center justify-between border-b hover:bg-slate-50 transition-colors">
+                  <span className="text-sm font-bold text-slate-700">Pick-Up & Delivery Details</span>
+                  {expandedSections.pickup ? <ChevronUp className="w-4 h-4 text-slate-400"/> : <ChevronDown className="w-4 h-4 text-slate-400"/>}
+                </button>
+                {expandedSections.pickup && (
+                  <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-6">
+                    <div className="space-y-1">
+                      <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Pick Up City</label>
+                      <select 
+                        className={inputClasses} 
+                        value={editFormData.pickupCity || ''} 
+                        onChange={e => setEditFormData({...editFormData, pickupCity: e.target.value, deliveryCity: ''})}
+                      >
+                        <option value="">Select pickup city</option>
+                        {editPickupCities.map(city => (
+                          <option key={city} value={city}>{city}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1"><label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Pick Up Address</label><input className={inputClasses} value={editFormData.pickupAddress || ''} onChange={e => setEditFormData({...editFormData, pickupAddress: e.target.value})} /></div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Delivery City</label>
+                      <select 
+                        className={inputClasses} 
+                        value={editFormData.deliveryCity || ''} 
+                        onChange={e => setEditFormData({...editFormData, deliveryCity: e.target.value})}
+                        disabled={!editFormData.pickupCity}
+                      >
+                        <option value="">{editFormData.pickupCity ? 'Select delivery city' : 'Select pickup city first'}</option>
+                        {editDeliveryCities.map(city => (
+                          <option key={city} value={city}>{city}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1"><label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Delivery Address</label><input className={inputClasses} value={editFormData.deliveryAddress || ''} onChange={e => setEditFormData({...editFormData, deliveryAddress: e.target.value})} /></div>
+                    <div className="space-y-1"><label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Pickup Date</label><input type="date" className={inputClasses} value={editFormData.pickupDate || ''} onChange={e => setEditFormData({...editFormData, pickupDate: e.target.value})} /></div>
+                    <div className="space-y-1"><label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Delivery Date</label><input type="date" className={inputClasses} value={editFormData.deliveryDate || ''} onChange={e => setEditFormData({...editFormData, deliveryDate: e.target.value})} /></div>
+                  </div>
+                )}
+              </div>
+
+              {/* Auction Section */}
+              <div className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
+                <button type="button" onClick={() => toggleSection('auction')} className="w-full px-6 py-3 flex items-center justify-between border-b hover:bg-slate-50 transition-colors">
+                  <span className="text-sm font-bold text-slate-700">Auction Parameters</span>
+                  {expandedSections.auction ? <ChevronUp className="w-4 h-4 text-slate-400"/> : <ChevronDown className="w-4 h-4 text-slate-400"/>}
+                </button>
+                {expandedSections.auction && (
+                  <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-6">
+                    <div className="space-y-1"><label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Reserved Price</label><input type="number" className={boxInputClasses} value={editFormData.reservedPrice || 0} onChange={e => setEditFormData({...editFormData, reservedPrice: parseInt(e.target.value) || 0})} /></div>
+                    <div className="space-y-1"><label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Ceiling Rate</label><input type="number" className={boxInputClasses} value={editFormData.ceilingRate || 0} onChange={e => setEditFormData({...editFormData, ceilingRate: parseInt(e.target.value) || 0})} /></div>
+                    <div className="space-y-1"><label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Step Value</label><input type="number" className={boxInputClasses} value={editFormData.stepValue || 0} onChange={e => setEditFormData({...editFormData, stepValue: parseInt(e.target.value) || 0})} /></div>
+                    <div className="space-y-1"><label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Bid Start Date</label><input type="date" className={inputClasses} value={editFormData.bidStartDate || ''} onChange={e => setEditFormData({...editFormData, bidStartDate: e.target.value})} /></div>
+                    <div className="space-y-1"><label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Start Time</label><input type="time" className={inputClasses} value={editFormData.bidStartTime || ''} onChange={e => setEditFormData({...editFormData, bidStartTime: e.target.value})} /></div>
+                    <div className="space-y-1"><label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Bid End Date</label><input type="date" className={inputClasses} value={editFormData.bidEndDate || ''} onChange={e => setEditFormData({...editFormData, bidEndDate: e.target.value})} /></div>
+                    <div className="space-y-1"><label className="text-xs text-slate-500 font-bold uppercase tracking-tight">End Time</label><input type="time" className={inputClasses} value={editFormData.bidEndTime || ''} onChange={e => setEditFormData({...editFormData, bidEndTime: e.target.value})} /></div>
+                  </div>
+                )}
+              </div>
+            </form>
+            <div className="bg-white px-6 py-4 border-t flex space-x-3">
+              <button type="submit" onClick={handleEditSubmit} disabled={isUpdating} className="bg-[#4f46e5] text-white px-8 py-2 rounded-md font-bold text-sm hover:bg-[#4338ca] shadow-lg shadow-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed">
+                {isUpdating ? 'Updating...' : 'Save Changes'}
+              </button>
+              <button type="button" onClick={handleEditCancel} disabled={isUpdating} className="bg-white border text-slate-600 px-8 py-2 rounded-md font-bold text-sm hover:bg-slate-50 disabled:opacity-50">Cancel</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Lane Master Modal */}
-      {isLaneModalOpen && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col p-8">
-            <h3 className="text-xl font-bold text-slate-800 mb-6">Define New Route (Legacy)</h3>
-            <p className="text-gray-600 text-sm mb-4">Use the Lane Master tab for the new interface</p>
-            <div className="flex space-x-3 pt-4">
-              <button type="button" onClick={() => setIsLaneModalOpen(false)} className="flex-grow bg-slate-100 text-slate-600 px-6 rounded-xl font-bold">Close</button>
+      {/* Delete Confirmation Dialog */}
+      {isDeleteConfirmOpen && bidToDelete && (
+        <div className="fixed inset-0 z-[101] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div className="p-6 text-center">
+              <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <AlertCircle className="w-6 h-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 mb-2">Delete Bid?</h3>
+              <p className="text-slate-600 text-sm mb-6">
+                Are you sure you want to delete bid <span className="font-semibold">{bidToDelete.id}</span>? This action cannot be undone.
+              </p>
+              <p className="text-slate-500 text-xs mb-6">
+                <strong>Route:</strong> {bidToDelete.origin} → {bidToDelete.destination}
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleDeleteCancel}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-2 border border-slate-200 text-slate-700 rounded-lg font-semibold hover:bg-slate-50 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isDeleting ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* Feedback Toast */}
+      {feedbackMessage && (
+        <div className={`fixed bottom-4 right-4 px-4 py-3 rounded-lg text-sm font-semibold text-white shadow-lg animate-pulse ${feedbackMessage.type === 'success' ? 'bg-emerald-500' : 'bg-red-500'}`}>
+          {feedbackMessage.text}
+        </div>
+      )}
+
+      {/* Vendor Master Modal */}
+      {/* Removed - use dedicated Vendor Master component */}
+
+      {/* Lane Master Modal */}
+      {/* Removed - use dedicated Lane Master component */}
     </div>
   );
 };
