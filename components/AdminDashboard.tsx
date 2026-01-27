@@ -1,18 +1,19 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Plus, 
-  ChevronRight, 
-  ArrowRight, 
-  MapPin, 
-  Clock, 
-  Truck, 
-  Users, 
+ Plus,
+  ChevronRight,
+  ArrowRight,
+  MapPin,
+  Clock,
+  Truck,
+  Users,
   BarChart3,
   TrendingDown,
   ChevronDown,
   ChevronUp,
   X,
+  Trash,
   History,
   CheckCircle2,
   AlertCircle,
@@ -25,7 +26,9 @@ import {
   Globe,
   Settings,
   Building2,
-  Route
+  Route,
+  Edit,
+  Trash2
 } from 'lucide-react';
 import { ShipmentBid, BidStatus, VehicleType, LoadType, Notification, User, UserRole, Lane } from '../types';
 import { INITIAL_LANES, MOCK_USERS } from '../mockData';
@@ -139,6 +142,29 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (now < start) return "Not Started Yet";
     if (now >= end || bid.status === BidStatus.CLOSED) return "Completed";
     return "In Process";
+  };
+
+  const handleEditBid = (bid: ShipmentBid) => {
+    setNewBid({
+      ...bid,
+      requestDate: bid.requestDate || new Date().toISOString().split('T')[0],
+      pickupDate: bid.pickupDate || new Date().toISOString().split('T')[0],
+      deliveryDate: bid.deliveryDate || new Date().toISOString().split('T')[0],
+      bidStartDate: bid.bidStartDate || new Date().toISOString().split('T')[0],
+      bidEndDate: bid.bidEndDate || new Date().toISOString().split('T')[0]
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteBid = async (bidId: string) => {
+    if (confirm('Are you sure you want to delete this bid?')) {
+      try {
+        await FirebaseService.deleteShipmentBid(bidId);
+        setSelectedBid(null);
+      } catch (error) {
+        console.error('Error deleting bid:', error);
+      }
+    }
   };
 
   const getTimeRemaining = (bid: ShipmentBid) => {
@@ -405,7 +431,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div className="bg-slate-900 text-white p-6">
                     <div className="flex justify-between items-start mb-4">
                       <div><h3 className="text-lg font-bold">Shipment Insights</h3><p className="text-[10px] text-slate-400 uppercase font-black">ID: {selectedBid.id}</p></div>
-                      <button onClick={() => setSelectedBid(null)} className="p-1 hover:bg-white/10 rounded-lg"><X className="w-5 h-5" /></button>
+                      <div className="flex items-center space-x-2">
+                        <button onClick={() => handleEditBid(selectedBid)} className="p-1 hover:bg-white/10 rounded-lg" title="Edit bid">
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => handleDeleteBid(selectedBid.id)} className="p-1 hover:bg-red-500/20 rounded-lg text-red-400" title="Delete bid">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setSelectedBid(null)} className="p-1 hover:bg-white/10 rounded-lg"><X className="w-5 h-5" /></button>
+                      </div>
                     </div>
                     <div className="flex items-center space-x-4 text-xs">
                       <div className="bg-white/10 px-3 py-1 rounded-full flex items-center"><MapPin className="w-3 h-3 mr-1" /> {selectedBid.origin}</div>
@@ -458,96 +492,174 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {activeTab === 'VENDORS' && (
-        <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
-          <div className="p-8 border-b border-slate-100 flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-slate-800">Vendor Master</h2>
-              <p className="text-sm text-slate-500">Manage transport partners and their operating lanes.</p>
+        <div className="space-y-6">
+          {/* Header with Stats */}
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl p-8 text-white">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-3xl font-bold mb-2">Vendor Master</h2>
+                <p className="text-blue-100">Manage transport partners and their operating lanes</p>
+              </div>
+              <button 
+                onClick={() => {
+                  setEditingVendor(null);
+                  setNewVendor({ name: '', lanes: [] });
+                  setIsVendorModalOpen(true);
+                }}
+                className="bg-white text-blue-600 px-6 py-3 rounded-xl flex items-center space-x-2 font-bold shadow-lg hover:shadow-xl transition-all"
+              >
+                <Plus className="w-5 h-5" />
+                <span>Add Partner</span>
+              </button>
             </div>
-            <button 
-              onClick={() => {
-                setEditingVendor(null);
-                setNewVendor({ name: '', lanes: [] });
-                setIsVendorModalOpen(true);
-              }}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl flex items-center space-x-2 transition-all font-bold shadow-lg shadow-blue-50"
-            >
-              <Plus className="w-5 h-5" />
-              <span>Add New Vendor</span>
-            </button>
+            <div className="grid grid-cols-3 gap-6">
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4">
+                <div className="flex items-center space-x-3">
+                  <Building2 className="w-8 h-8 text-white/80" />
+                  <div>
+                    <p className="text-2xl font-bold">{vendors.length}</p>
+                    <p className="text-blue-100 text-sm">Active Partners</p>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4">
+                <div className="flex items-center space-x-3">
+                  <Route className="w-8 h-8 text-white/80" />
+                  <div>
+                    <p className="text-2xl font-bold">{lanes.length}</p>
+                    <p className="text-blue-100 text-sm">Total Lanes</p>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4">
+                <div className="flex items-center space-x-3">
+                  <CheckCircle2 className="w-8 h-8 text-white/80" />
+                  <div>
+                    <p className="text-2xl font-bold">{vendors.filter(v => v.lanes && v.lanes.length > 0).length}</p>
+                    <p className="text-blue-100 text-sm">Assigned</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest">
-                  <th className="px-8 py-4">Vendor Name</th>
-                  <th className="px-8 py-4">Associated Lanes</th>
-                  <th className="px-8 py-4">Status</th>
-                  <th className="px-8 py-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {vendorsLoading ? (
-                  <tr>
-                    <td colSpan={4} className="px-8 py-12 text-center">
-                      <div className="flex items-center justify-center space-x-2">
-                        <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                        <span className="text-slate-500 text-sm">Loading vendors...</span>
-                      </div>
-                    </td>
-                  </tr>
-                ) : vendors.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-8 py-12 text-center">
-                      <div className="text-slate-400">
-                        <Building2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                        <p className="text-sm font-medium">No vendors found</p>
-                        <p className="text-xs text-slate-400 mt-1">Add your first vendor to get started</p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  vendors
-                    .filter(vendor => vendor && vendor.name && vendor.name.trim() !== '') // Only show vendors with valid names
-                    .map(vendor => (
-                    <tr key={vendor.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-8 py-6">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600 font-bold">
-                            {vendor.name?.charAt(0)?.toUpperCase() || '?'}
+
+          {/* Vendor Grid */}
+          {vendorsLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="bg-white rounded-2xl p-6 shadow-sm border animate-pulse">
+                  <div className="flex items-center space-x-4 mb-4">
+                    <div className="w-12 h-12 bg-slate-200 rounded-xl"></div>
+                    <div className="flex-1">
+                      <div className="h-4 bg-slate-200 rounded mb-2"></div>
+                      <div className="h-3 bg-slate-200 rounded w-20"></div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-3 bg-slate-200 rounded"></div>
+                    <div className="h-3 bg-slate-200 rounded w-3/4"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : vendors.length === 0 ? (
+            <div className="bg-white rounded-3xl p-16 text-center border-2 border-dashed border-slate-200">
+              <Building2 className="w-16 h-16 mx-auto mb-4 text-slate-300" />
+              <h3 className="text-xl font-bold text-slate-600 mb-2">No Transport Partners</h3>
+              <p className="text-slate-500 mb-6 max-w-md mx-auto">Start building your logistics network by adding your first transport partner</p>
+              <button 
+                onClick={() => {
+                  setEditingVendor(null);
+                  setNewVendor({ name: '', lanes: [] });
+                  setIsVendorModalOpen(true);
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg"
+              >
+                Add First Partner
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {vendors.filter(vendor => vendor && vendor.name && vendor.name.trim() !== '').map(vendor => {
+                const assignedLanes = vendor.lanes || [];
+                const isActive = assignedLanes.length > 0;
+                return (
+                  <div key={vendor.id} className="bg-white rounded-2xl p-6 shadow-sm border hover:shadow-lg transition-all group">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center space-x-4">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg ${
+                          isActive ? 'bg-gradient-to-br from-blue-500 to-indigo-600' : 'bg-slate-400'
+                        }`}>
+                          {vendor.name?.charAt(0)?.toUpperCase() || '?'}
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-slate-800 text-lg">{vendor.name || 'Unnamed Vendor'}</h4>
+                          <div className="flex items-center space-x-2">
+                            <span className={`w-2 h-2 rounded-full ${
+                              isActive ? 'bg-emerald-500' : 'bg-slate-300'
+                            }`}></span>
+                            <span className={`text-xs font-medium ${
+                              isActive ? 'text-emerald-600' : 'text-slate-500'
+                            }`}>
+                              {isActive ? 'Active' : 'Inactive'}
+                            </span>
                           </div>
-                          <span className="font-bold text-slate-800">{vendor.name || 'Unnamed Vendor'}</span>
                         </div>
-                      </td>
-                      <td className="px-8 py-6">
-                        <div className="flex flex-wrap gap-2">
-                          {vendor.lanes && vendor.lanes.length > 0 ? (
-                            vendor.lanes.map(l => (
-                              <span key={l} className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2.5 py-1 rounded-lg border border-slate-200">{l}</span>
-                            ))
-                          ) : (
-                            <span className="text-slate-400 text-[10px] italic">No lanes assigned</span>
-                          )}
+                      </div>
+                      <button 
+                        onClick={() => handleEditVendorClick(vendor)}
+                        className="opacity-0 group-hover:opacity-100 p-2 hover:bg-slate-100 rounded-lg transition-all"
+                        title="Edit vendor"
+                      >
+                        <Settings className="w-4 h-4 text-slate-400" />
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-slate-600">Operating Lanes</span>
+                        <span className="bg-slate-100 text-slate-700 text-xs font-bold px-2 py-1 rounded-full">
+                          {assignedLanes.length}
+                        </span>
+                      </div>
+                      
+                      {assignedLanes.length > 0 ? (
+                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                          {assignedLanes.map(lane => {
+                            const [origin, destination] = lane.split('-');
+                            return (
+                              <div key={lane} className="flex items-center justify-between bg-slate-50 rounded-lg p-2">
+                                <div className="flex items-center space-x-2 text-sm">
+                                  <MapPin className="w-3 h-3 text-blue-500" />
+                                  <span className="font-medium text-slate-700">{origin}</span>
+                                  <ArrowRight className="w-3 h-3 text-slate-400" />
+                                  <span className="font-medium text-slate-700">{destination}</span>
+                                </div>
+                                <span className="text-xs text-slate-500 bg-white px-2 py-0.5 rounded border">
+                                  {lane}
+                                </span>
+                              </div>
+                            );
+                          })}
                         </div>
-                      </td>
-                      <td className="px-8 py-6">
-                        <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-tight">Active</span>
-                      </td>
-                      <td className="px-8 py-6">
-                        <button 
-                          onClick={() => handleEditVendorClick(vendor)}
-                          className="text-slate-400 hover:text-blue-600 transition-colors"
-                          title="Edit vendor"
-                        >
-                          <Settings className="w-5 h-5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                      ) : (
+                        <div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-lg">
+                          <Route className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                          <p className="text-xs text-slate-400 font-medium">No lanes assigned</p>
+                          <button 
+                            onClick={() => handleEditVendorClick(vendor)}
+                            className="text-xs text-blue-600 hover:text-blue-700 font-medium mt-1"
+                          >
+                            Assign Lanes
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -745,78 +857,212 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* Vendor Master Modal */}
       {isVendorModalOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col p-8">
-            <h3 className="text-xl font-bold text-slate-800 mb-6">
-              {editingVendor ? 'Edit Vendor' : 'Create New Vendor'}
-            </h3>
-            {vendorCreationStatus.error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
-                <p className="text-sm font-medium">{vendorCreationStatus.error}</p>
-              </div>
-            )}
-            <form onSubmit={editingVendor ? handleEditVendor : handleAddVendor} className="space-y-6">
-              <div className="space-y-1">
-                <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Vendor Entity Name</label>
-                <input required className={boxInputClasses} value={newVendor.name} onChange={e => setNewVendor({...newVendor, name: e.target.value})} placeholder="e.g. Express Haulers Ltd." disabled={vendorCreationStatus.loading} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Assign Lanes</label>
-                <div className="max-h-40 overflow-y-auto border border-slate-100 rounded-xl p-3 space-y-2">
-                  {lanes.map(l => (
-                    <label key={l.id} className="flex items-center space-x-3 cursor-pointer p-1 hover:bg-slate-50 rounded">
-                      <input 
-                        type="checkbox" 
-                        checked={newVendor.lanes.includes(l.name)}
-                        onChange={(e) => {
-                          const updated = e.target.checked 
-                            ? [...newVendor.lanes, l.name]
-                            : newVendor.lanes.filter(item => item !== l.name);
-                          setNewVendor({...newVendor, lanes: updated});
-                        }}
-                        className="w-4 h-4 text-blue-600 rounded"
-                        disabled={vendorCreationStatus.loading}
-                      />
-                      <span className="text-sm font-medium text-slate-700">{l.name}</span>
-                    </label>
-                  ))}
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl">
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-8">
+              <h3 className="text-2xl font-bold mb-2">
+                {editingVendor ? 'Edit Transport Partner' : 'Add Transport Partner'}
+              </h3>
+              <p className="text-blue-100">
+                {editingVendor ? 'Update partner details and lane assignments' : 'Register a new logistics partner'}
+              </p>
+            </div>
+            
+            <div className="p-8">
+              {vendorCreationStatus.error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6">
+                  <div className="flex items-center space-x-2">
+                    <AlertCircle className="w-4 h-4" />
+                    <p className="text-sm font-medium">{vendorCreationStatus.error}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex space-x-3 pt-4">
-                <button type="submit" className="flex-grow bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled={vendorCreationStatus.loading}>
-                  {vendorCreationStatus.loading 
-                    ? (editingVendor ? 'Updating...' : 'Creating...') 
-                    : (editingVendor ? 'Update Vendor' : 'Save Vendor')
-                  }
-                </button>
-                <button type="button" onClick={handleCancelEdit} className="bg-slate-100 text-slate-600 px-6 rounded-xl font-bold" disabled={vendorCreationStatus.loading}>Cancel</button>
-              </div>
-            </form>
+              )}
+              
+              <form onSubmit={editingVendor ? handleEditVendor : handleAddVendor} className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700 flex items-center space-x-2">
+                    <Building2 className="w-4 h-4" />
+                    <span>Company Name</span>
+                  </label>
+                  <input 
+                    required 
+                    className="w-full bg-slate-50 border-2 border-slate-200 focus:border-blue-500 focus:bg-white px-4 py-3 rounded-xl text-slate-900 font-medium outline-none transition-all" 
+                    value={newVendor.name} 
+                    onChange={e => setNewVendor({...newVendor, name: e.target.value})} 
+                    placeholder="e.g. Express Logistics Pvt Ltd" 
+                    disabled={vendorCreationStatus.loading} 
+                  />
+                </div>
+                
+                <div className="space-y-3">
+                  <label className="text-sm font-bold text-slate-700 flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Route className="w-4 h-4" />
+                      <span>Operating Lanes</span>
+                    </div>
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-bold">
+                      {newVendor.lanes.length} selected
+                    </span>
+                  </label>
+                  
+                  <div className="bg-slate-50 border-2 border-slate-200 rounded-xl p-4">
+                    {lanes.length === 0 ? (
+                      <div className="text-center py-6">
+                        <Route className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                        <p className="text-sm text-slate-500">No lanes available</p>
+                        <p className="text-xs text-slate-400">Create lanes first in Lane Master</p>
+                      </div>
+                    ) : (
+                      <div className="max-h-48 overflow-y-auto space-y-2">
+                        {lanes.map(lane => {
+                          const isSelected = newVendor.lanes.includes(lane.name);
+                          return (
+                            <label key={lane.id} className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-all ${
+                              isSelected ? 'bg-blue-50 border-2 border-blue-200' : 'bg-white border-2 border-transparent hover:bg-slate-50'
+                            }`}>
+                              <input 
+                                type="checkbox" 
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  const updated = e.target.checked 
+                                    ? [...newVendor.lanes, lane.name]
+                                    : newVendor.lanes.filter(item => item !== lane.name);
+                                  setNewVendor({...newVendor, lanes: updated});
+                                }}
+                                className="w-4 h-4 text-blue-600 rounded border-2 border-slate-300"
+                                disabled={vendorCreationStatus.loading}
+                              />
+                              <div className="flex-1 flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                  <MapPin className="w-4 h-4 text-slate-400" />
+                                  <span className="font-medium text-slate-700">{lane.origin}</span>
+                                  <ArrowRight className="w-3 h-3 text-slate-400" />
+                                  <span className="font-medium text-slate-700">{lane.destination}</span>
+                                </div>
+                                <span className="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded font-bold">
+                                  {lane.name}
+                                </span>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="flex space-x-3 pt-6">
+                  <button 
+                    type="submit" 
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-xl" 
+                    disabled={vendorCreationStatus.loading}
+                  >
+                    {vendorCreationStatus.loading 
+                      ? (editingVendor ? 'Updating...' : 'Creating...') 
+                      : (editingVendor ? 'Update Partner' : 'Add Partner')
+                    }
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={handleCancelEdit} 
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-6 rounded-xl font-bold transition-all" 
+                    disabled={vendorCreationStatus.loading}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Lane Master Modal */}
-      {isLaneModalOpen && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col p-8">
-            <h3 className="text-xl font-bold text-slate-800 mb-6">Define New Route</h3>
-            <form onSubmit={handleAddLane} className="space-y-6">
-              <div className="space-y-1">
-                <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Origin City</label>
-                <input required className={boxInputClasses} value={newLane.origin} onChange={e => setNewLane({...newLane, origin: e.target.value})} placeholder="e.g. Hyderabad" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">Destination City</label>
-                <input required className={boxInputClasses} value={newLane.destination} onChange={e => setNewLane({...newLane, destination: e.target.value})} placeholder="e.g. Pune" />
-              </div>
-              <div className="flex space-x-3 pt-4">
-                <button type="submit" className="flex-grow bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-50">Register Lane</button>
-                <button type="button" onClick={() => setIsLaneModalOpen(false)} className="bg-slate-100 text-slate-600 px-6 rounded-xl font-bold">Cancel</button>
-              </div>
-            </form>
+    {/* Lane Master Modal */}
+{isLaneModalOpen && (
+  <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in">
+
+      {/* Header */}
+      <div className="px-8 pt-8 pb-4 border-b border-slate-100">
+        <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+          <Plus className="w-5 h-5 text-blue-600" />
+          Define New Route
+        </h3>
+        <p className="text-sm text-slate-500 mt-1">
+          Create a lane for vendor bidding & auctions
+        </p>
+      </div>
+
+      {/* Body */}
+      <form onSubmit={handleAddLane} className="p-8 space-y-6">
+
+        {/* Info Alert */}
+        <div className="flex items-start gap-3 bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm text-blue-700">
+          <AlertCircle className="w-5 h-5 mt-0.5" />
+          <p>
+            Ensure city names are correct. Once created, lanes are used in live auctions.
+          </p>
+        </div>
+
+        {/* Origin */}
+        <div className="space-y-1">
+          <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">
+            Origin City
+          </label>
+          <div className="relative">
+            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+            <input
+              required
+              value={newLane.origin}
+              onChange={(e) =>
+                setNewLane({ ...newLane, origin: e.target.value })
+              }
+              placeholder="e.g. Hyderabad"
+              className={`${boxInputClasses} pl-10`}
+            />
           </div>
         </div>
-      )}
+
+        {/* Destination */}
+        <div className="space-y-1">
+          <label className="text-xs text-slate-500 font-bold uppercase tracking-tight">
+            Destination City
+          </label>
+          <div className="relative">
+            <ArrowRight className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+            <input
+              required
+              value={newLane.destination}
+              onChange={(e) =>
+                setNewLane({ ...newLane, destination: e.target.value })
+              }
+              placeholder="e.g. Pune"
+              className={`${boxInputClasses} pl-10`}
+            />
+          </div>
+        </div>
+
+        {/* Footer Buttons */}
+        <div className="flex gap-3 pt-4">
+          <button
+            type="submit"
+            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-100 transition-all active:scale-[0.98]"
+          >
+            Register Lane
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsLaneModalOpen(false)}
+            className="px-6 rounded-xl font-bold bg-slate-100 hover:bg-slate-200 text-slate-600 transition"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
+
     </div>
   );
 };

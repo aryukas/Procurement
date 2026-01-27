@@ -1,11 +1,28 @@
 // src/services/firebaseService.ts
-import { database } from '../firebase.ts';
+
+import { database } from '../firebase';
 import { ref, set, get, push, update, onValue, off } from 'firebase/database';
-import { DB_PATHS, Bid, Shipment, User } from '../utils/dbStructure';
-import { ShipmentBid, BidStatus, BidOffer, VehicleDetails, Notification } from '../../types';
+
+import {
+  DB_PATHS,
+  Bid,
+  Shipment,
+  User,
+  Lane
+} from '../utils/dbStructure';
+
+import {
+  ShipmentBid,
+  BidStatus,
+  BidOffer,
+  VehicleDetails,
+  Notification
+} from '../../types';
 
 export class FirebaseService {
-  // User operations
+
+  /* ================= USER ================= */
+
   static async createUser(userId: string, userData: User) {
     try {
       await set(ref(database, `${DB_PATHS.USERS}/${userId}`), userData);
@@ -26,7 +43,8 @@ export class FirebaseService {
     }
   }
 
-  // Bid operations
+  /* ================= BIDS (Legacy Bid Model) ================= */
+
   static async createBid(bidData: Omit<Bid, 'bidId'>) {
     try {
       const newBidRef = push(ref(database, DB_PATHS.BIDS));
@@ -42,10 +60,9 @@ export class FirebaseService {
   static async getBids() {
     try {
       const snapshot = await get(ref(database, DB_PATHS.BIDS));
-      if (snapshot.exists()) {
-        return Object.values(snapshot.val()) as Bid[];
-      }
-      return [];
+      return snapshot.exists()
+        ? (Object.values(snapshot.val()) as Bid[])
+        : [];
     } catch (error) {
       console.error('Error getting bids:', error);
       return [];
@@ -62,21 +79,16 @@ export class FirebaseService {
     }
   }
 
-  // Real-time listeners
   static listenToBids(callback: (bids: Bid[]) => void) {
     const bidsRef = ref(database, DB_PATHS.BIDS);
-    onValue(bidsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const bids = Object.values(snapshot.val()) as Bid[];
-        callback(bids);
-      } else {
-        callback([]);
-      }
+    onValue(bidsRef, snapshot => {
+      callback(snapshot.exists() ? Object.values(snapshot.val()) : []);
     });
     return () => off(bidsRef);
   }
 
-  // Shipment operations
+  /* ================= SHIPMENTS ================= */
+
   static async createShipment(shipmentData: Omit<Shipment, 'shipmentId'>) {
     try {
       const newShipmentRef = push(ref(database, DB_PATHS.SHIPMENTS));
@@ -91,18 +103,14 @@ export class FirebaseService {
 
   static listenToShipments(callback: (shipments: Shipment[]) => void) {
     const shipmentsRef = ref(database, DB_PATHS.SHIPMENTS);
-    onValue(shipmentsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const shipments = Object.values(snapshot.val()) as Shipment[];
-        callback(shipments);
-      } else {
-        callback([]);
-      }
+    onValue(shipmentsRef, snapshot => {
+      callback(snapshot.exists() ? Object.values(snapshot.val()) : []);
     });
     return () => off(shipmentsRef);
   }
 
-  // Vendor operations
+  /* ================= VENDORS ================= */
+
   static async createVendor(vendorData: Omit<User, 'id'>) {
     try {
       const newVendorRef = push(ref(database, DB_PATHS.VENDORS));
@@ -118,10 +126,9 @@ export class FirebaseService {
   static async getVendors() {
     try {
       const snapshot = await get(ref(database, DB_PATHS.VENDORS));
-      if (snapshot.exists()) {
-        return Object.values(snapshot.val()) as User[];
-      }
-      return [];
+      return snapshot.exists()
+        ? (Object.values(snapshot.val()) as User[])
+        : [];
     } catch (error) {
       console.error('Error getting vendors:', error);
       return [];
@@ -148,16 +155,27 @@ export class FirebaseService {
     }
   }
 
-  // Lane operations
+  static listenToVendors(callback: (vendors: User[]) => void) {
+    const vendorsRef = ref(database, DB_PATHS.VENDORS);
+    onValue(vendorsRef, snapshot => {
+      callback(snapshot.exists() ? Object.values(snapshot.val()) : []);
+    });
+    return () => off(vendorsRef);
+  }
+
+  /* ================= LANES ================= */
+
   static async createLane(laneData: Omit<Lane, 'id' | 'name'>) {
     try {
       const laneName = `${laneData.origin.toUpperCase()}-${laneData.destination.toUpperCase()}`;
       const newLaneRef = push(ref(database, DB_PATHS.LANES));
-      const laneWithId = { 
-        ...laneData, 
-        id: newLaneRef.key,
+
+      const laneWithId: Lane = {
+        ...laneData,
+        id: newLaneRef.key!,
         name: laneName
       };
+
       await set(newLaneRef, laneWithId);
       return { success: true, laneId: newLaneRef.key };
     } catch (error) {
@@ -169,10 +187,9 @@ export class FirebaseService {
   static async getLanes() {
     try {
       const snapshot = await get(ref(database, DB_PATHS.LANES));
-      if (snapshot.exists()) {
-        return Object.values(snapshot.val()) as Lane[];
-      }
-      return [];
+      return snapshot.exists()
+        ? (Object.values(snapshot.val()) as Lane[])
+        : [];
     } catch (error) {
       console.error('Error getting lanes:', error);
       return [];
@@ -199,36 +216,19 @@ export class FirebaseService {
     }
   }
 
-  // Real-time listeners for lanes
   static listenToLanes(callback: (lanes: Lane[]) => void) {
     const lanesRef = ref(database, DB_PATHS.LANES);
-    onValue(lanesRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const lanes = Object.values(snapshot.val()) as Lane[];
-        callback(lanes);
-      } else {
-        callback([]);
-      }
+    onValue(lanesRef, snapshot => {
+      callback(snapshot.exists() ? Object.values(snapshot.val()) : []);
     });
     return () => off(lanesRef);
   }
 
-  // Real-time listeners for vendors
-  static listenToVendors(callback: (vendors: User[]) => void) {
-    const vendorsRef = ref(database, DB_PATHS.VENDORS);
-    onValue(vendorsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const vendors = Object.values(snapshot.val()) as User[];
-        callback(vendors);
-      } else {
-        callback([]);
-      }
-    });
-    return () => off(vendorsRef);
-  }
+  /* ================= SHIPMENT BID (CURRENT APP MODEL) ================= */
 
-  // ShipmentBid operations (for the app's current structure)
-  static async createShipmentBid(bidData: Omit<ShipmentBid, 'id' | 'offers' | 'createdAt'>) {
+  static async createShipmentBid(
+    bidData: Omit<ShipmentBid, 'id' | 'offers' | 'createdAt'>
+  ) {
     try {
       const newBidRef = push(ref(database, DB_PATHS.BIDS));
       const bidWithId: ShipmentBid = {
@@ -238,6 +238,7 @@ export class FirebaseService {
         createdAt: new Date().toISOString(),
         status: BidStatus.OPEN
       };
+
       await set(newBidRef, bidWithId);
       return { success: true, bidId: newBidRef.key };
     } catch (error) {
@@ -260,14 +261,17 @@ export class FirebaseService {
     try {
       const bidRef = ref(database, `${DB_PATHS.BIDS}/${bidId}`);
       const snapshot = await get(bidRef);
-      if (snapshot.exists()) {
-        const bid = snapshot.val() as ShipmentBid;
-        const currentOffers = bid.offers || []; // Ensure offers is always an array
-        const updatedOffers = [...currentOffers, offer].sort((a, b) => a.amount - b.amount);
-        await update(bidRef, { offers: updatedOffers });
-        return { success: true };
+
+      if (!snapshot.exists()) {
+        return { success: false, error: 'Bid not found' };
       }
-      return { success: false, error: 'Bid not found' };
+
+      const bid = snapshot.val() as ShipmentBid;
+      const updatedOffers = [...(bid.offers || []), offer]
+        .sort((a, b) => a.amount - b.amount);
+
+      await update(bidRef, { offers: updatedOffers });
+      return { success: true };
     } catch (error) {
       console.error('Error placing bid offer:', error);
       return { success: false, error };
@@ -284,23 +288,35 @@ export class FirebaseService {
     }
   }
 
-  // Real-time listeners for ShipmentBid
+  static async deleteShipmentBid(bidId: string) {
+    try {
+      await set(ref(database, `${DB_PATHS.BIDS}/${bidId}`), null);
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting shipment bid:', error);
+      return { success: false, error };
+    }
+  }
+
   static listenToShipmentBids(callback: (bids: ShipmentBid[]) => void) {
     const bidsRef = ref(database, DB_PATHS.BIDS);
-    onValue(bidsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const rawData = snapshot.val();
-        const bids = Object.values(snapshot.val()).map((bid: any) => ({
-          ...bid,
-          offers: bid.offers || [], // Ensure offers is always an array
-          status: bid.status || BidStatus.OPEN,
-          createdAt: bid.createdAt || new Date().toISOString()
-        })) as ShipmentBid[];
-        callback(bids);
-      } else {
+
+    onValue(bidsRef, snapshot => {
+      if (!snapshot.exists()) {
         callback([]);
+        return;
       }
+
+      const bids = Object.values(snapshot.val()).map((bid: any) => ({
+        ...bid,
+        offers: bid.offers || [],
+        status: bid.status || BidStatus.OPEN,
+        createdAt: bid.createdAt || new Date().toISOString()
+      })) as ShipmentBid[];
+
+      callback(bids);
     });
+
     return () => off(bidsRef);
   }
 }

@@ -73,7 +73,7 @@ class ErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
-import { MOCK_USERS } from './mockData';
+import { MOCK_USERS } from '../mockData';
 import { 
   User, 
   UserRole, 
@@ -84,15 +84,17 @@ import {
   VehicleType, 
   LoadType, 
   VehicleDetails 
-} from './types';
-import AdminDashboard from './components/AdminDashboard';
-import VendorDashboard from './components/VendorDashboard';
-import Login from './components/Login';
-import { useBids } from './src/hooks/useFirebaseData';
-import { FirebaseService } from './src/services/firebaseService';
+} from '../types';
+import AdminDashboard from '../components/AdminDashboard';
+import VendorDashboard from '../components/VendorDashboard';
+import Login from '../components/Login';
+import AdminAuth from '../components/AdminAuth';
+import { useBids } from './hooks/useFirebaseData';
+import { FirebaseService } from './services/firebaseService';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [showAdminAuth, setShowAdminAuth] = useState(false);
   const { bids, loading: bidsLoading } = useBids();
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
@@ -113,7 +115,12 @@ const App: React.FC = () => {
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
+    setShowAdminAuth(false);
     addNotification(user.id, 'Welcome Back', `Logged in as ${user.name}`, 'info');
+  };
+
+  const handleAdminAuthRequest = () => {
+    setShowAdminAuth(true);
   };
 
   const handleLogout = () => {
@@ -242,8 +249,12 @@ const App: React.FC = () => {
     }
   };
 
+  if (showAdminAuth) {
+    return <AdminAuth onLogin={handleLogin} />;
+  }
+
   if (!currentUser) {
-    return <Login onLogin={handleLogin} />;
+    return <Login onLogin={handleLogin} onAdminAuth={handleAdminAuthRequest} />;
   }
 
   return (

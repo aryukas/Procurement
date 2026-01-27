@@ -7,9 +7,10 @@ import { useVendors } from '../src/hooks/useFirebaseData';
 
 interface LoginProps {
   onLogin: (user: User) => void;
+  onAdminAuth: () => void;
 }
 
-const Login: React.FC<LoginProps> = ({ onLogin }) => {
+const Login: React.FC<LoginProps> = ({ onLogin, onAdminAuth }) => {
   const { vendors, loading: vendorsLoading } = useVendors();
 
   return (
@@ -47,26 +48,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             {/* Admin Option */}
             <div className="border-b pb-4 mb-4">
               <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Internal</p>
-              {MOCK_USERS.filter(u => u.role === UserRole.ADMIN).map(user => (
-                <button
-                  key={user.id}
-                  onClick={() => onLogin(user)}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-slate-100 hover:border-blue-500 hover:bg-blue-50 transition-all group"
-                >
-                  <div className="flex items-center space-x-4">
-                    <div className="bg-blue-100 p-2 rounded-lg group-hover:bg-blue-200 transition-colors">
-                      <ShieldCheck className="w-6 h-6 text-blue-700" />
-                    </div>
-                    <div className="text-left">
-                      <p className="font-bold text-slate-800">{user.name}</p>
-                      <p className="text-xs text-slate-500">Fleet Administrator</p>
-                    </div>
-                  </div>
-                  <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-blue-500 transition-colors">
-                    <div className="w-2 h-2 rounded-full bg-slate-300 group-hover:bg-white"></div>
-                  </div>
-                </button>
-              ))}
+              <button
+                onClick={onAdminAuth}
+                className="w-full flex items-center justify-center p-3 rounded-lg border-2 border-dashed border-blue-300 hover:border-blue-500 hover:bg-blue-50 transition-all text-blue-600 hover:text-blue-700"
+              >
+                <ShieldCheck className="w-5 h-5 mr-2" />
+                <span className="font-medium">Admin Login</span>
+              </button>
             </div>
 
             {/* Vendor Options */}
